@@ -1,48 +1,72 @@
+import { useCrm } from "../context/CrmContext";
+
 export default function RightPanel() {
-  const fittings = [
-    { time: "11:00", client: "Иванов И.И.", order: "#001" },
-    { time: "14:00", client: "Петрова А.А.", order: "#002" },
-    { time: "16:00", client: "Смирнова Д.А.", order: "#003" },
-  ];
+  // Берем реальные примерки из общего CRM-хранилища
+  const { fittings } = useCrm();
+
+  // Считаем примерки по статусам
+  const plannedFittings = fittings.filter(
+    (fitting) => fitting.status === "Запланирована"
+  );
+
+  const completedFittings = fittings.filter(
+    (fitting) => fitting.status === "Прошла"
+  );
+
+  const cancelledFittings = fittings.filter(
+    (fitting) => fitting.status === "Отменена"
+  );
+
+  // На главной показываем только 5 ближайших/последних примерок
+  const latestFittings = fittings.slice(0, 5);
 
   return (
     <aside className="right-panel">
       <div className="panel-card">
-        <h2>Календарь</h2>
+        <h2>Примерки</h2>
 
-        <div className="calendar-head">
-          <span>Июнь 2026</span>
-        </div>
-
-        <div className="calendar-grid">
-          {["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"].map((day) => (
-            <strong key={day}>{day}</strong>
-          ))}
-
-          {[15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28].map(
-            (date) => (
-              <button className={date === 22 ? "selected" : ""} key={date}>
-                {date}
-              </button>
-            )
-          )}
+        <div className="measurements-grid">
+          <span>Запланировано: {plannedFittings.length}</span>
+          <span>Прошло: {completedFittings.length}</span>
+          <span>Отменено: {cancelledFittings.length}</span>
         </div>
       </div>
 
       <div className="panel-card">
         <h2>Ближайшие примерки</h2>
 
-        <div className="fittings-list">
-          {fittings.map((item) => (
-            <div className="fitting-item" key={item.time}>
-              <span>{item.time}</span>
+        <div className="clients-list">
+          {latestFittings.map((fitting) => (
+            <div className="client-item" key={fitting.id}>
+              <div className="client-avatar">{fitting.client[0]}</div>
+
               <div>
-                <strong>{item.client}</strong>
-                <p>{item.order}</p>
+                <strong>{fitting.client}</strong>
+                <p>
+                  {fitting.date} в {fitting.time}
+                </p>
+                <p>Заказ: {fitting.order}</p>
               </div>
+
+              <span>{fitting.status}</span>
             </div>
           ))}
+
+          {latestFittings.length === 0 && (
+            <p style={{ padding: "16px", color: "#777" }}>
+              Примерок пока нет
+            </p>
+          )}
         </div>
+      </div>
+
+      <div className="panel-card">
+        <h2>Подсказка</h2>
+
+        <p style={{ color: "#777", lineHeight: "1.6" }}>
+          Чтобы CRM была полезной для ателье, у каждого клиента должны быть
+          замеры, у каждого заказа — статус, а у каждой примерки — дата и время.
+        </p>
       </div>
     </aside>
   );

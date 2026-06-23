@@ -1,20 +1,40 @@
+import { useCrm } from "../context/CrmContext";
+
 export default function StatsCards() {
+  // Берем реальные заказы и клиентов из общего CRM-хранилища
+  const { orders, clients } = useCrm();
+
+  // Считаем заказы, которые ещё не завершены
+  const activeOrders = orders.filter(
+    (order) => order.status === "В работе" || order.status === "Примерка"
+  );
+
+  // Считаем готовые заказы
+  const completedOrders = orders.filter((order) => order.status === "Готово");
+
+  // Считаем общую сумму заказов.
+  // У нас price хранится как строка "500 €", поэтому убираем всё кроме цифр.
+  const totalRevenue = orders.reduce((sum, order) => {
+    const numericPrice = Number(String(order.price).replace(/\D/g, ""));
+    return sum + numericPrice;
+  }, 0);
+
   const stats = [
     {
-      title: "Новые заказы",
-      value: "14",
+      title: "Клиенты",
+      value: clients.length,
     },
     {
-      title: "В работе",
-      value: "30",
+      title: "Активные заказы",
+      value: activeOrders.length,
     },
     {
       title: "Готово к выдаче",
-      value: "8",
+      value: completedOrders.length,
     },
     {
       title: "Выручка",
-      value: "275 000 zł",
+      value: `${totalRevenue} €`,
     },
   ];
 

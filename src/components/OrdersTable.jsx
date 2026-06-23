@@ -1,27 +1,11 @@
+import { useCrm } from "../context/CrmContext";
+
 export default function OrdersTable() {
-  const orders = [
-    {
-      id: "#001",
-      client: "Иванов И.И.",
-      item: "Пиджак",
-      status: "В работе",
-      statusClass: "blue",
-    },
-    {
-      id: "#002",
-      client: "Петрова А.А.",
-      item: "Платье",
-      status: "Примерка",
-      statusClass: "purple",
-    },
-    {
-      id: "#003",
-      client: "Смирнова Д.А.",
-      item: "Брюки",
-      status: "Готово",
-      statusClass: "green",
-    },
-  ];
+  // Берем реальные заказы из общего CRM-хранилища
+  const { orders } = useCrm();
+
+  // На Dashboard показываем только последние 5 заказов
+  const latestOrders = orders.slice(0, 5);
 
   return (
     <div className="orders-card">
@@ -38,11 +22,11 @@ export default function OrdersTable() {
         </thead>
 
         <tbody>
-          {orders.map((order) => (
+          {latestOrders.map((order) => (
             <tr key={order.id}>
               <td>{order.id}</td>
               <td>{order.client}</td>
-              <td>{order.item}</td>
+              <td>{order.product}</td>
               <td>
                 <span className={`status ${order.statusClass}`}>
                   {order.status}
@@ -52,6 +36,12 @@ export default function OrdersTable() {
           ))}
         </tbody>
       </table>
+
+      {latestOrders.length === 0 && (
+        <p style={{ padding: "20px", color: "#777" }}>
+          Заказов пока нет
+        </p>
+      )}
     </div>
   );
 }

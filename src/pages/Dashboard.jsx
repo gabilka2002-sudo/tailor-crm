@@ -19,10 +19,16 @@ export default function Dashboard({ setPage }) {
 
         <div className="dashboard-grid">
           <section>
+            {/* Карточки статистики теперь берут реальные данные из CrmContext */}
             <StatsCards />
+
+            {/* Таблица последних заказов теперь тоже показывает реальные заказы */}
             <OrdersTable />
+
             <QuickActions />
-            <ClientsPreview />
+
+            {/* Последние клиенты теперь берутся из общего CRM-хранилища */}
+            <ClientsPreview setPage={setPage} />
           </section>
 
           <RightPanel />

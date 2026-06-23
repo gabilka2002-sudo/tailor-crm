@@ -4,6 +4,7 @@ import Clients from "./pages/Clients";
 import Orders from "./pages/Orders";
 import Fittings from "./pages/Fittings";
 import Settings from "./pages/Settings";
+import { CrmProvider } from "./context/CrmContext";
 
 export default function App() {
   const [page, setPage] = useState("dashboard");
@@ -16,5 +17,5 @@ export default function App() {
     settings: <Settings setPage={setPage} />,
   };
 
-  return pages[page];
+  return <CrmProvider>{pages[page]}</CrmProvider>;
 }

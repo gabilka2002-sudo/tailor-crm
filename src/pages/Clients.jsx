@@ -1,46 +1,113 @@
 import { useState } from "react";
 import Sidebar from "../components/Sidebar";
 import Header from "../components/Header";
+import { useCrm } from "../context/CrmContext";
+
+const emptyMeasurements = {
+  shoulders: "",
+  chest: "",
+  waist: "",
+  hips: "",
+  sleeve: "",
+  length: "",
+  neck: "",
+  height: "",
+};
+
+const measurementLabels = {
+  shoulders: "Плечи",
+  chest: "Грудь",
+  waist: "Талия",
+  hips: "Бёдра",
+  sleeve: "Рукав",
+  length: "Длина изделия",
+  neck: "Шея",
+  height: "Рост",
+};
 
 export default function Clients({ setPage }) {
+  // Забираем клиентов и функции из общего CRM-хранилища
+  const { clients, addClient, deleteClient, updateClientMeasurements } = useCrm();
+
+  // Показывать или скрывать модальное окно добавления клиента
   const [showForm, setShowForm] = useState(false);
+
+  // Текст поиска клиента
   const [search, setSearch] = useState("");
-  const [selectedClient, setSelectedClient] = useState(null);
 
-  const [clients, setClients] = useState([
-    { id: 1, name: "Иванов И.И.", phone: "+48 500 111 222", email: "ivan@email.com", orders: 3 },
-    { id: 2, name: "Петрова А.А.", phone: "+48 600 222 333", email: "anna@email.com", orders: 1 },
-    { id: 3, name: "Смирнова Д.А.", phone: "+48 700 333 444", email: "daria@email.com", orders: 2 },
-  ]);
+  // id клиента, карточку которого открыли
+  const [selectedClientId, setSelectedClientId] = useState(null);
 
-  const handleAddClient = (e) => {
-    e.preventDefault();
+  // Временные значения формы замеров
+  const [measurementForm, setMeasurementForm] = useState(emptyMeasurements);
 
-    const formData = new FormData(e.currentTarget);
+  // Находим открытого клиента по id.
+  // Так данные в карточке будут обновляться после сохранения замеров.
+  const selectedClient = clients.find((client) => client.id === selectedClientId);
+
+  // Фильтруем клиентов по имени, телефону или email
+  const filteredClients = clients.filter((client) => {
+    const searchText = search.toLowerCase();
+
+    return (
+      client.name.toLowerCase().includes(searchText) ||
+      client.phone.toLowerCase().includes(searchText) ||
+      client.email.toLowerCase().includes(searchText)
+    );
+  });
+
+  function handleOpenClient(client) {
+    setSelectedClientId(client.id);
+
+    // Если у старого клиента ещё нет measurements, подставляем пустые поля
+    setMeasurementForm({
+      ...emptyMeasurements,
+      ...(client.measurements || {}),
+    });
+  }
+
+  function handleAddClient(event) {
+    event.preventDefault();
+
+    const formData = new FormData(event.currentTarget);
 
     const newClient = {
-      id: Date.now(),
       name: formData.get("name"),
       phone: formData.get("phone"),
       email: formData.get("email"),
-      orders: 0,
+      comment: formData.get("comment"),
     };
 
-    setClients([newClient, ...clients]);
+    addClient(newClient);
     setShowForm(false);
-  };
+  }
 
-  const handleDeleteClient = (clientId) => {
-    setClients(clients.filter((client) => client.id !== clientId));
-    setSelectedClient(null);
-  };
+  function handleDeleteClient(clientId) {
+    const isConfirmed = window.confirm("Удалить этого клиента?");
 
-  const filteredClients = clients.filter(
-    (client) =>
-      client.name.toLowerCase().includes(search.toLowerCase()) ||
-      client.phone.toLowerCase().includes(search.toLowerCase()) ||
-      client.email.toLowerCase().includes(search.toLowerCase())
-  );
+    if (!isConfirmed) return;
+
+    deleteClient(clientId);
+    setSelectedClientId(null);
+  }
+
+  function handleMeasurementChange(event) {
+    const { name, value } = event.target;
+
+    setMeasurementForm((currentMeasurements) => ({
+      ...currentMeasurements,
+      [name]: value,
+    }));
+  }
+
+  function handleSaveMeasurements() {
+    if (!selectedClient) return;
+
+    // Сохраняем замеры клиента в общем CRM-хранилище
+    updateClientMeasurements(selectedClient.id, measurementForm);
+
+    alert("Замеры клиента сохранены");
+  }
 
   return (
     <div className="layout">
@@ -104,7 +171,7 @@ export default function Clients({ setPage }) {
           className="client-search"
           placeholder="Поиск клиента..."
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={(event) => setSearch(event.target.value)}
         />
 
         <div className="clients-grid">
@@ -112,9 +179,10 @@ export default function Clients({ setPage }) {
             <div
               className="client-card"
               key={client.id}
-              onClick={() => setSelectedClient(client)}
+              onClick={() => handleOpenClient(client)}
             >
               <div className="client-avatar">{client.name[0]}</div>
+
               <h3>{client.name}</h3>
               <p>{client.phone}</p>
               <p>{client.email}</p>
@@ -128,22 +196,50 @@ export default function Clients({ setPage }) {
             <div className="client-modal">
               <div className="modal-head">
                 <h2>{selectedClient.name}</h2>
-                <button onClick={() => setSelectedClient(null)}>×</button>
+                <button onClick={() => setSelectedClientId(null)}>×</button>
               </div>
 
               <div className="client-details">
-                <p><strong>Телефон:</strong> {selectedClient.phone}</p>
-                <p><strong>Email:</strong> {selectedClient.email}</p>
-                <p><strong>Заказы:</strong> {selectedClient.orders}</p>
+                <p>
+                  <strong>Телефон:</strong> {selectedClient.phone}
+                </p>
 
-                <h3>Замеры</h3>
+                <p>
+                  <strong>Email:</strong> {selectedClient.email}
+                </p>
+
+                <p>
+                  <strong>Заказы:</strong> {selectedClient.orders}
+                </p>
+
+                {selectedClient.comment && (
+                  <p>
+                    <strong>Комментарий:</strong> {selectedClient.comment}
+                  </p>
+                )}
+
+                <h3>Замеры клиента</h3>
 
                 <div className="measurements-grid">
-                  <span>Плечи: 48 см</span>
-                  <span>Грудь: 102 см</span>
-                  <span>Талия: 88 см</span>
-                  <span>Рукав: 64 см</span>
+                  {Object.entries(measurementLabels).map(([key, label]) => (
+                    <label key={key}>
+                      {label}
+                      <input
+                        name={key}
+                        value={measurementForm[key]}
+                        onChange={handleMeasurementChange}
+                        placeholder="см"
+                      />
+                    </label>
+                  ))}
                 </div>
+
+                <button
+                  className="new-order-button"
+                  onClick={handleSaveMeasurements}
+                >
+                  Сохранить замеры
+                </button>
 
                 <button
                   className="delete-client-button"
