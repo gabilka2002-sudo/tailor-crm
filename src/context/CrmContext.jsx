@@ -89,8 +89,6 @@ export function CrmProvider({ children }) {
       email: clientData.email,
       comment: clientData.comment || "",
       orders: 0,
-
-      // Замеры клиента
       measurements: {
         shoulders: "",
         chest: "",
@@ -104,6 +102,47 @@ export function CrmProvider({ children }) {
     };
 
     setClients((currentClients) => [newClient, ...currentClients]);
+  };
+
+  // Обновляет основные данные клиента
+  const updateClient = (clientId, updatedData) => {
+    setClients((currentClients) =>
+      currentClients.map((client) =>
+        client.id === clientId
+          ? {
+              ...client,
+              name: updatedData.name,
+              phone: updatedData.phone,
+              email: updatedData.email,
+              comment: updatedData.comment || "",
+            }
+          : client
+      )
+    );
+
+    // Если имя клиента изменилось — обновляем его в заказах
+    setOrders((currentOrders) =>
+      currentOrders.map((order) =>
+        order.client === updatedData.oldName
+          ? {
+              ...order,
+              client: updatedData.name,
+            }
+          : order
+      )
+    );
+
+    // Если имя клиента изменилось — обновляем его в примерках
+    setFittings((currentFittings) =>
+      currentFittings.map((fitting) =>
+        fitting.client === updatedData.oldName
+          ? {
+              ...fitting,
+              client: updatedData.name,
+            }
+          : fitting
+      )
+    );
   };
 
   // Удаляет клиента
@@ -133,7 +172,7 @@ export function CrmProvider({ children }) {
       id: getNextOrderId(orders),
       client: orderData.client,
       product: orderData.product,
-      price: `${orderData.price} €`,
+      price: orderData.price,
       status: orderData.status,
       statusClass: getStatusClass(orderData.status),
       deadline: orderData.deadline,
@@ -152,7 +191,7 @@ export function CrmProvider({ children }) {
     );
   };
 
-  // Обновляет данные заказа: изделие, цену, срок, комментарий и статус
+  // Обновляет данные заказа
   const updateOrder = (orderId, updatedData) => {
     setOrders((currentOrders) =>
       currentOrders.map((order) =>
@@ -161,7 +200,7 @@ export function CrmProvider({ children }) {
               ...order,
               client: updatedData.client,
               product: updatedData.product,
-              price: `${String(updatedData.price).replace(/[^\d]/g, "")} €`,
+              price: updatedData.price,
               status: updatedData.status,
               statusClass: getStatusClass(updatedData.status),
               deadline: updatedData.deadline,
@@ -179,7 +218,7 @@ export function CrmProvider({ children }) {
     );
   };
 
-  // Меняет статус заказа: "В работе", "Примерка", "Готово"
+  // Меняет статус заказа
   const updateOrderStatus = (orderId, newStatus) => {
     setOrders((currentOrders) =>
       currentOrders.map((order) =>
@@ -209,7 +248,26 @@ export function CrmProvider({ children }) {
     setFittings((currentFittings) => [newFitting, ...currentFittings]);
   };
 
-  // Меняет статус примерки
+  // Обновляет данные примерки: клиент, заказ, дата, время, статус, комментарий
+  const updateFitting = (fittingId, updatedData) => {
+    setFittings((currentFittings) =>
+      currentFittings.map((fitting) =>
+        fitting.id === fittingId
+          ? {
+              ...fitting,
+              client: updatedData.client,
+              order: updatedData.order,
+              date: updatedData.date,
+              time: updatedData.time,
+              status: updatedData.status,
+              comment: updatedData.comment || "",
+            }
+          : fitting
+      )
+    );
+  };
+
+  // Меняет только статус примерки
   const updateFittingStatus = (fittingId, status) => {
     setFittings((currentFittings) =>
       currentFittings.map((fitting) =>
@@ -272,6 +330,7 @@ export function CrmProvider({ children }) {
       fittings,
 
       addClient,
+      updateClient,
       deleteClient,
       updateClientMeasurements,
 
@@ -281,6 +340,7 @@ export function CrmProvider({ children }) {
       updateOrderStatus,
 
       addFitting,
+      updateFitting,
       updateFittingStatus,
       deleteFitting,
 

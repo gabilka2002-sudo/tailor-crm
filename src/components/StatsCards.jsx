@@ -1,19 +1,48 @@
 import { useCrm } from "../context/CrmContext";
 
-export default function StatsCards() {
-  // Берем реальные заказы и клиентов из общего CRM-хранилища
-  const { orders, clients } = useCrm();
+function parseDate(dateString) {
+  // В проекте даты могут быть в формате "20.07.2026" или "2026-07-20".
+  // Эта функция приводит оба формата к обычной JavaScript Date.
+  if (!dateString) return null;
 
-  // Считаем заказы, которые ещё не завершены
+  if (dateString.includes(".")) {
+    const [day, month, year] = dateString.split(".");
+    return new Date(`${year}-${month}-${day}`);
+  }
+
+  return new Date(dateString);
+}
+
+export default function StatsCards() {
+  // Берем реальные заказы, клиентов и примерки из общего CRM-хранилища
+  const { orders, clients, fittings } = useCrm();
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  // Активные заказы — это всё, что ещё не готово
   const activeOrders = orders.filter(
     (order) => order.status === "В работе" || order.status === "Примерка"
   );
 
-  // Считаем готовые заказы
+  // Готовые заказы
   const completedOrders = orders.filter((order) => order.status === "Готово");
 
-  // Считаем общую сумму заказов.
-  // У нас price хранится как строка "500 €", поэтому убираем всё кроме цифр.
+  // Просроченные заказы: срок меньше сегодняшней даты и заказ ещё не готов
+  const overdueOrders = orders.filter((order) => {
+    const deadline = parseDate(order.deadline);
+
+    if (!deadline) return false;
+
+    return deadline < today && order.status !== "Готово";
+  });
+
+  // Запланированные примерки
+  const plannedFittings = fittings.filter(
+    (fitting) => fitting.status === "Запланирована"
+  );
+
+  // Считаем общую сумму заказов
   const totalRevenue = orders.reduce((sum, order) => {
     const numericPrice = Number(String(order.price).replace(/\D/g, ""));
     return sum + numericPrice;
@@ -29,8 +58,16 @@ export default function StatsCards() {
       value: activeOrders.length,
     },
     {
-      title: "Готово к выдаче",
+      title: "Готово",
       value: completedOrders.length,
+    },
+    {
+      title: "Просрочено",
+      value: overdueOrders.length,
+    },
+    {
+      title: "Примерки",
+      value: plannedFittings.length,
     },
     {
       title: "Выручка",

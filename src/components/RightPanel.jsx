@@ -1,34 +1,79 @@
 import { useCrm } from "../context/CrmContext";
 
+function parseDate(dateString) {
+  // Поддерживаем два формата дат:
+  // "20.07.2026" и "2026-07-20"
+  if (!dateString) return null;
+
+  if (dateString.includes(".")) {
+    const [day, month, year] = dateString.split(".");
+    return new Date(`${year}-${month}-${day}`);
+  }
+
+  return new Date(dateString);
+}
+
+function isToday(dateString) {
+  const date = parseDate(dateString);
+
+  if (!date) return false;
+
+  const today = new Date();
+
+  return (
+    date.getFullYear() === today.getFullYear() &&
+    date.getMonth() === today.getMonth() &&
+    date.getDate() === today.getDate()
+  );
+}
+
 export default function RightPanel() {
-  // Берем реальные примерки из общего CRM-хранилища
-  const { fittings } = useCrm();
+  // Берем реальные заказы и примерки из общего CRM-хранилища
+  const { orders, fittings } = useCrm();
 
-  // Считаем примерки по статусам
-  const plannedFittings = fittings.filter(
-    (fitting) => fitting.status === "Запланирована"
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  // Заказы, которые просрочены и ещё не готовы
+  const overdueOrders = orders.filter((order) => {
+    const deadline = parseDate(order.deadline);
+
+    if (!deadline) return false;
+
+    return deadline < today && order.status !== "Готово";
+  });
+
+  // Заказы, которые уже готовы и их можно выдавать клиенту
+  const readyOrders = orders.filter((order) => order.status === "Готово");
+
+  // Примерки на сегодня
+  const todayFittings = fittings.filter(
+    (fitting) =>
+      fitting.status === "Запланирована" && isToday(fitting.date)
   );
 
-  const completedFittings = fittings.filter(
-    (fitting) => fitting.status === "Прошла"
-  );
+  // Ближайшие примерки: сортируем по дате и времени
+  const upcomingFittings = fittings
+    .filter((fitting) => fitting.status === "Запланирована")
+    .sort((a, b) => {
+      const dateA = parseDate(a.date);
+      const dateB = parseDate(b.date);
 
-  const cancelledFittings = fittings.filter(
-    (fitting) => fitting.status === "Отменена"
-  );
+      if (!dateA || !dateB) return 0;
 
-  // На главной показываем только 5 ближайших/последних примерок
-  const latestFittings = fittings.slice(0, 5);
+      return dateA - dateB;
+    })
+    .slice(0, 5);
 
   return (
     <aside className="right-panel">
       <div className="panel-card">
-        <h2>Примерки</h2>
+        <h2>Сегодня</h2>
 
         <div className="measurements-grid">
-          <span>Запланировано: {plannedFittings.length}</span>
-          <span>Прошло: {completedFittings.length}</span>
-          <span>Отменено: {cancelledFittings.length}</span>
+          <span>Примерки сегодня: {todayFittings.length}</span>
+          <span>Готово к выдаче: {readyOrders.length}</span>
+          <span>Просрочено: {overdueOrders.length}</span>
         </div>
       </div>
 
@@ -36,7 +81,7 @@ export default function RightPanel() {
         <h2>Ближайшие примерки</h2>
 
         <div className="clients-list">
-          {latestFittings.map((fitting) => (
+          {upcomingFittings.map((fitting) => (
             <div className="client-item" key={fitting.id}>
               <div className="client-avatar">{fitting.client[0]}</div>
 
@@ -52,21 +97,64 @@ export default function RightPanel() {
             </div>
           ))}
 
-          {latestFittings.length === 0 && (
+          {upcomingFittings.length === 0 && (
             <p style={{ padding: "16px", color: "#777" }}>
-              Примерок пока нет
+              Ближайших примерок нет
             </p>
           )}
         </div>
       </div>
 
       <div className="panel-card">
-        <h2>Подсказка</h2>
+        <h2>Готово к выдаче</h2>
 
-        <p style={{ color: "#777", lineHeight: "1.6" }}>
-          Чтобы CRM была полезной для ателье, у каждого клиента должны быть
-          замеры, у каждого заказа — статус, а у каждой примерки — дата и время.
-        </p>
+        <div className="clients-list">
+          {readyOrders.slice(0, 5).map((order) => (
+            <div className="client-item" key={order.id}>
+              <div className="client-avatar">{order.client[0]}</div>
+
+              <div>
+                <strong>{order.client}</strong>
+                <p>{order.product}</p>
+                <p>Заказ: {order.id}</p>
+              </div>
+
+              <span>{order.price}</span>
+            </div>
+          ))}
+
+          {readyOrders.length === 0 && (
+            <p style={{ padding: "16px", color: "#777" }}>
+              Готовых заказов пока нет
+            </p>
+          )}
+        </div>
+      </div>
+
+      <div className="panel-card">
+        <h2>Риски</h2>
+
+        <div className="clients-list">
+          {overdueOrders.slice(0, 5).map((order) => (
+            <div className="client-item" key={order.id}>
+              <div className="client-avatar">!</div>
+
+              <div>
+                <strong>{order.client}</strong>
+                <p>{order.product}</p>
+                <p>Срок: {order.deadline}</p>
+              </div>
+
+              <span>{order.status}</span>
+            </div>
+          ))}
+
+          {overdueOrders.length === 0 && (
+            <p style={{ padding: "16px", color: "#777" }}>
+              Просроченных заказов нет
+            </p>
+          )}
+        </div>
       </div>
     </aside>
   );

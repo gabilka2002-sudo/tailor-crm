@@ -2,6 +2,7 @@ import { useState } from "react";
 import Sidebar from "../components/Sidebar";
 import Header from "../components/Header";
 import { useCrm } from "../context/CrmContext";
+import { normalizePrice, validateOrderData } from "../utils/validators";
 
 export default function Orders({ setPage }) {
   // Берем данные и функции из общего CRM-хранилища
@@ -23,6 +24,9 @@ export default function Orders({ setPage }) {
   // Текст поиска по заказам
   const [search, setSearch] = useState("");
 
+  // Активный фильтр по статусу заказа
+  const [statusFilter, setStatusFilter] = useState("Все");
+
   // id заказа, который пользователь открыл кликом
   const [selectedOrderId, setSelectedOrderId] = useState(null);
 
@@ -40,16 +44,28 @@ export default function Orders({ setPage }) {
   // Так карточка будет обновляться после изменения статуса или редактирования.
   const selectedOrder = orders.find((order) => order.id === selectedOrderId);
 
-  // Фильтруем заказы по номеру, клиенту, изделию или статусу
+  // Считаем количество заказов по статусам для кнопок фильтра
+  const statusCounts = {
+    Все: orders.length,
+    "В работе": orders.filter((order) => order.status === "В работе").length,
+    Примерка: orders.filter((order) => order.status === "Примерка").length,
+    Готово: orders.filter((order) => order.status === "Готово").length,
+  };
+
+  // Фильтруем заказы по поиску и по выбранному статусу
   const filteredOrders = orders.filter((order) => {
     const searchText = search.toLowerCase();
 
-    return (
+    const matchesSearch =
       order.id.toLowerCase().includes(searchText) ||
       order.client.toLowerCase().includes(searchText) ||
       order.product.toLowerCase().includes(searchText) ||
-      order.status.toLowerCase().includes(searchText)
-    );
+      order.status.toLowerCase().includes(searchText);
+
+    const matchesStatus =
+      statusFilter === "Все" || order.status === statusFilter;
+
+    return matchesSearch && matchesStatus;
   });
 
   function handleAddOrder(event) {
@@ -66,7 +82,20 @@ export default function Orders({ setPage }) {
       comment: formData.get("comment"),
     };
 
-    addOrder(newOrder);
+    // Проверяем данные перед созданием заказа
+    const validationError = validateOrderData(newOrder);
+
+    if (validationError) {
+      alert(validationError);
+      return;
+    }
+
+    // Нормализуем цену, чтобы она всегда была в виде "500 €"
+    addOrder({
+      ...newOrder,
+      price: normalizePrice(newOrder.price),
+    });
+
     setShowForm(false);
   }
 
@@ -114,11 +143,80 @@ export default function Orders({ setPage }) {
 
     if (!selectedOrder) return;
 
-    // Сохраняем обновленный заказ в общем CRM-хранилище
-    updateOrder(selectedOrder.id, editForm);
+    // Проверяем данные перед сохранением изменений
+    const validationError = validateOrderData(editForm);
 
-    // Закрываем режим редактирования
+    if (validationError) {
+      alert(validationError);
+      return;
+    }
+
+    // Сохраняем обновленный заказ в общем CRM-хранилище
+    updateOrder(selectedOrder.id, {
+      ...editForm,
+      price: normalizePrice(editForm.price),
+    });
+
     setIsEditing(false);
+  }
+
+  function escapeCsvValue(value) {
+    // CSV ломается, если внутри значения есть запятая, кавычки или перенос строки.
+    // Поэтому такие значения оборачиваем в кавычки и экранируем внутренние кавычки.
+    const stringValue = String(value ?? "");
+
+    if (
+      stringValue.includes(",") ||
+      stringValue.includes('"') ||
+      stringValue.includes("\n")
+    ) {
+      return `"${stringValue.replaceAll('"', '""')}"`;
+    }
+
+    return stringValue;
+  }
+
+  function handleExportOrdersCsv() {
+    // Заголовки колонок CSV
+    const headers = [
+      "Номер заказа",
+      "Клиент",
+      "Изделие",
+      "Стоимость",
+      "Статус",
+      "Срок",
+      "Комментарий",
+    ];
+
+    // Экспортируем именно отфильтрованные заказы,
+    // чтобы можно было выгрузить, например, только "Готово"
+    const rows = filteredOrders.map((order) => [
+      order.id,
+      order.client,
+      order.product,
+      order.price,
+      order.status,
+      order.deadline,
+      order.comment || "",
+    ]);
+
+    const csvContent = [headers, ...rows]
+      .map((row) => row.map(escapeCsvValue).join(","))
+      .join("\n");
+
+    // BOM нужен, чтобы Excel корректно открыл кириллицу
+    const file = new Blob([`\uFEFF${csvContent}`], {
+      type: "text/csv;charset=utf-8;",
+    });
+
+    const downloadUrl = URL.createObjectURL(file);
+
+    const link = document.createElement("a");
+    link.href = downloadUrl;
+    link.download = "tailor-crm-orders.csv";
+    link.click();
+
+    URL.revokeObjectURL(downloadUrl);
   }
 
   return (
@@ -134,9 +232,21 @@ export default function Orders({ setPage }) {
             <p>Управление заказами ателье</p>
           </div>
 
-          <button className="new-order-button" onClick={() => setShowForm(true)}>
-            + Новый заказ
-          </button>
+          <div style={{ display: "flex", gap: "12px" }}>
+            <button
+              className="new-order-button"
+              onClick={handleExportOrdersCsv}
+            >
+              Экспорт CSV
+            </button>
+
+            <button
+              className="new-order-button"
+              onClick={() => setShowForm(true)}
+            >
+              + Новый заказ
+            </button>
+          </div>
         </div>
 
         {showForm && (
@@ -207,6 +317,29 @@ export default function Orders({ setPage }) {
           value={search}
           onChange={(event) => setSearch(event.target.value)}
         />
+
+        <div
+          className="orders-card"
+          style={{ marginBottom: "24px", padding: "16px" }}
+        >
+          <h2>Фильтр по статусу</h2>
+
+          <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
+            {["Все", "В работе", "Примерка", "Готово"].map((status) => (
+              <button
+                key={status}
+                className={
+                  statusFilter === status
+                    ? "new-order-button"
+                    : "delete-client-button"
+                }
+                onClick={() => setStatusFilter(status)}
+              >
+                {status} ({statusCounts[status]})
+              </button>
+            ))}
+          </div>
+        </div>
 
         <div className="orders-card">
           <table>

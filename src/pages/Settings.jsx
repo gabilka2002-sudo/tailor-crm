@@ -23,6 +23,130 @@ export default function Settings({ setPage }) {
     (fitting) => fitting.status === "Запланирована"
   );
 
+  // Эта функция защищает CSV от проблем с запятыми, кавычками и переносами строк.
+  // Без неё Excel/Google Sheets могут неправильно открыть файл.
+  function escapeCsvValue(value) {
+    const stringValue = String(value ?? "");
+
+    if (
+      stringValue.includes(",") ||
+      stringValue.includes('"') ||
+      stringValue.includes("\n")
+    ) {
+      return `"${stringValue.replaceAll('"', '""')}"`;
+    }
+
+    return stringValue;
+  }
+
+  // Универсальная функция скачивания CSV.
+  // Мы передаем ей имя файла, заголовки колонок и строки данных.
+  function downloadCsv(filename, headers, rows) {
+    const csvContent = [headers, ...rows]
+      .map((row) => row.map(escapeCsvValue).join(","))
+      .join("\n");
+
+    // BOM нужен, чтобы Excel нормально открывал русский текст
+    const file = new Blob([`\uFEFF${csvContent}`], {
+      type: "text/csv;charset=utf-8;",
+    });
+
+    const downloadUrl = URL.createObjectURL(file);
+
+    const link = document.createElement("a");
+    link.href = downloadUrl;
+    link.download = filename;
+    link.click();
+
+    URL.revokeObjectURL(downloadUrl);
+  }
+
+  function handleExportClientsCsv() {
+    const headers = [
+      "ID",
+      "Имя",
+      "Телефон",
+      "Email",
+      "Количество заказов",
+      "Комментарий",
+      "Плечи",
+      "Грудь",
+      "Талия",
+      "Бёдра",
+      "Рукав",
+      "Длина изделия",
+      "Шея",
+      "Рост",
+    ];
+
+    const rows = clients.map((client) => [
+      client.id,
+      client.name,
+      client.phone,
+      client.email,
+      client.orders,
+      client.comment || "",
+      client.measurements?.shoulders || "",
+      client.measurements?.chest || "",
+      client.measurements?.waist || "",
+      client.measurements?.hips || "",
+      client.measurements?.sleeve || "",
+      client.measurements?.length || "",
+      client.measurements?.neck || "",
+      client.measurements?.height || "",
+    ]);
+
+    downloadCsv("tailor-crm-clients.csv", headers, rows);
+  }
+
+  function handleExportOrdersCsv() {
+    const headers = [
+      "Номер заказа",
+      "Клиент",
+      "Изделие",
+      "Стоимость",
+      "Статус",
+      "Срок",
+      "Комментарий",
+    ];
+
+    const rows = orders.map((order) => [
+      order.id,
+      order.client,
+      order.product,
+      order.price,
+      order.status,
+      order.deadline,
+      order.comment || "",
+    ]);
+
+    downloadCsv("tailor-crm-orders.csv", headers, rows);
+  }
+
+  function handleExportFittingsCsv() {
+    const headers = [
+      "ID",
+      "Клиент",
+      "Заказ",
+      "Дата",
+      "Время",
+      "Статус",
+      "Комментарий",
+    ];
+
+    const rows = fittings.map((fitting) => [
+      fitting.id,
+      fitting.client,
+      fitting.order,
+      fitting.date,
+      fitting.time,
+      fitting.status,
+      fitting.comment || "",
+    ]);
+
+    downloadCsv("tailor-crm-fittings.csv", headers, rows);
+  }
+
   function handleExportBackup() {
     // Получаем все данные CRM
     const backupData = exportCrmData();
@@ -35,7 +159,6 @@ export default function Settings({ setPage }) {
       type: "application/json",
     });
 
-    // Создаем временную ссылку для скачивания
     const downloadUrl = URL.createObjectURL(file);
 
     const link = document.createElement("a");
@@ -43,7 +166,6 @@ export default function Settings({ setPage }) {
     link.download = "tailor-crm-backup.json";
     link.click();
 
-    // Чистим временную ссылку
     URL.revokeObjectURL(downloadUrl);
   }
 
@@ -93,7 +215,7 @@ export default function Settings({ setPage }) {
         <div className="page-header">
           <div>
             <h1>Настройки</h1>
-            <p>Управление данными и резервными копиями CRM</p>
+            <p>Управление данными, экспортом и резервными копиями CRM</p>
           </div>
         </div>
 
@@ -110,16 +232,50 @@ export default function Settings({ setPage }) {
         </div>
 
         <div className="orders-card" style={{ marginBottom: "24px" }}>
-          <h2>Резервная копия</h2>
+          <h2>Экспорт в CSV</h2>
 
           <div className="client-details">
             <p>
-              Здесь можно скачать резервную копию клиентов, заказов и примерок.
-              Это полезно перед большими изменениями в коде.
+              CSV-файлы можно открыть в Excel, Google Sheets или отправить
+              владельцу ателье как отчёт.
+            </p>
+
+            <div className="measurements-grid">
+              <button
+                className="new-order-button"
+                onClick={handleExportClientsCsv}
+              >
+                Скачать клиентов CSV
+              </button>
+
+              <button
+                className="new-order-button"
+                onClick={handleExportOrdersCsv}
+              >
+                Скачать заказы CSV
+              </button>
+
+              <button
+                className="new-order-button"
+                onClick={handleExportFittingsCsv}
+              >
+                Скачать примерки CSV
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="orders-card" style={{ marginBottom: "24px" }}>
+          <h2>Полная резервная копия</h2>
+
+          <div className="client-details">
+            <p>
+              Backup JSON сохраняет всю CRM целиком: клиентов, заказы, примерки
+              и замеры. Это нужно для восстановления данных.
             </p>
 
             <button className="new-order-button" onClick={handleExportBackup}>
-              Скачать backup
+              Скачать backup JSON
             </button>
           </div>
         </div>
