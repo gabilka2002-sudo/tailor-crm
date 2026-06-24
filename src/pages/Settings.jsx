@@ -210,7 +210,7 @@ export default function Settings({ setPage }) {
       <Sidebar activePage="settings" setPage={setPage} />
 
       <main className="content">
-        <Header />
+        <Header setPage={setPage} />
 
         <div className="page-header">
           <div>

@@ -1,7 +1,16 @@
 import { useState } from "react";
 import Sidebar from "../components/Sidebar";
 import Header from "../components/Header";
+import Modal from "../components/Modal";
 import { useCrm } from "../context/CrmContext";
+import EmptyState from "../components/EmptyState";
+
+const emptyClientForm = {
+  name: "",
+  phone: "",
+  email: "",
+  comment: "",
+};
 
 const emptyMeasurements = {
   shoulders: "",
@@ -26,9 +35,11 @@ const measurementLabels = {
 };
 
 export default function Clients({ setPage }) {
-  // Забираем клиентов и функции из общего CRM-хранилища
+  // Забираем клиентов, заказы, примерки и функции из общего CRM-хранилища
   const {
     clients,
+    orders,
+    fittings,
     addClient,
     updateClient,
     deleteClient,
@@ -44,8 +55,15 @@ export default function Clients({ setPage }) {
   // Текст поиска клиента
   const [search, setSearch] = useState("");
 
+  // Сортировка списка клиентов
+  const [sortBy, setSortBy] = useState("nameAsc");
+
   // id клиента, карточку которого открыли
   const [selectedClientId, setSelectedClientId] = useState(null);
+
+  // Черновик формы нового клиента.
+  // Важно: он не очищается при закрытии модального окна.
+  const [clientForm, setClientForm] = useState(emptyClientForm);
 
   // Временные значения формы замеров
   const [measurementForm, setMeasurementForm] = useState(emptyMeasurements);
@@ -61,18 +79,61 @@ export default function Clients({ setPage }) {
 
   // Находим открытого клиента по id.
   // Так данные в карточке будут обновляться после сохранения.
-  const selectedClient = clients.find((client) => client.id === selectedClientId);
+  const selectedClient = clients.find(
+    (client) => client.id === selectedClientId
+  );
 
-  // Фильтруем клиентов по имени, телефону или email
-  const filteredClients = clients.filter((client) => {
-    const searchText = search.toLowerCase();
+  // Здесь одновременно работают поиск и сортировка клиентов
+  const filteredClients = clients
+    .filter((client) => {
+      const searchText = search.toLowerCase();
 
-    return (
-      client.name.toLowerCase().includes(searchText) ||
-      client.phone.toLowerCase().includes(searchText) ||
-      client.email.toLowerCase().includes(searchText)
-    );
-  });
+      return (
+        client.name.toLowerCase().includes(searchText) ||
+        client.phone.toLowerCase().includes(searchText) ||
+        client.email.toLowerCase().includes(searchText)
+      );
+    })
+    .sort((firstClient, secondClient) => {
+      if (sortBy === "nameAsc") {
+        return firstClient.name.localeCompare(secondClient.name, "ru");
+      }
+
+      if (sortBy === "nameDesc") {
+        return secondClient.name.localeCompare(firstClient.name, "ru");
+      }
+
+      if (sortBy === "ordersDesc") {
+        return Number(secondClient.orders || 0) - Number(firstClient.orders || 0);
+      }
+
+      if (sortBy === "ordersAsc") {
+        return Number(firstClient.orders || 0) - Number(secondClient.orders || 0);
+      }
+
+      if (sortBy === "newest") {
+        return Number(secondClient.id || 0) - Number(firstClient.id || 0);
+      }
+
+      if (sortBy === "oldest") {
+        return Number(firstClient.id || 0) - Number(secondClient.id || 0);
+      }
+
+      return 0;
+    });
+
+  function handleClientFormChange(event) {
+    const { name, value } = event.target;
+
+    setClientForm((currentForm) => ({
+      ...currentForm,
+      [name]: value,
+    }));
+  }
+
+  function handleClearClientForm() {
+    setClientForm(emptyClientForm);
+  }
 
   function handleOpenClient(client) {
     setSelectedClientId(client.id);
@@ -88,20 +149,54 @@ export default function Clients({ setPage }) {
   function handleAddClient(event) {
     event.preventDefault();
 
-    const formData = new FormData(event.currentTarget);
-
-    const newClient = {
-      name: formData.get("name"),
-      phone: formData.get("phone"),
-      email: formData.get("email"),
-      comment: formData.get("comment"),
+    const trimmedClient = {
+      name: clientForm.name.trim(),
+      phone: clientForm.phone.trim(),
+      email: clientForm.email.trim(),
+      comment: clientForm.comment.trim(),
     };
 
-    addClient(newClient);
+    // Простая проверка, чтобы не создать пустого клиента
+    if (!trimmedClient.name || !trimmedClient.phone || !trimmedClient.email) {
+      alert("Заполни имя, телефон и email клиента");
+      return;
+    }
+
+    addClient(trimmedClient);
+
+    // После успешного сохранения очищаем черновик формы
+    setClientForm(emptyClientForm);
+
+    // Закрываем окно
     setShowForm(false);
   }
 
   function handleDeleteClient(clientId) {
+    if (!selectedClient) return;
+
+    // Проверяем, есть ли у клиента связанные заказы
+    const clientOrders = orders.filter(
+      (order) => order.client === selectedClient.name
+    );
+
+    // Проверяем, есть ли у клиента связанные примерки
+    const clientFittings = fittings.filter(
+      (fitting) => fitting.client === selectedClient.name
+    );
+
+    // Если есть история, клиента лучше не удалять.
+    // Так мы не получим "висячие" заказы без клиента.
+    if (clientOrders.length > 0 || clientFittings.length > 0) {
+      alert(
+        `Нельзя удалить клиента "${selectedClient.name}", потому что у него есть связанные заказы или примерки.\n\n` +
+          `Заказы: ${clientOrders.length}\n` +
+          `Примерки: ${clientFittings.length}\n\n` +
+          "Сначала обработай или удали связанные данные."
+      );
+
+      return;
+    }
+
     const isConfirmed = window.confirm("Удалить этого клиента?");
 
     if (!isConfirmed) return;
@@ -159,10 +254,28 @@ export default function Clients({ setPage }) {
 
     if (!selectedClient) return;
 
+    const trimmedClient = {
+      name: editForm.name.trim(),
+      phone: editForm.phone.trim(),
+      email: editForm.email.trim(),
+      comment: editForm.comment.trim(),
+      oldName: editForm.oldName,
+    };
+
+    if (!trimmedClient.name || !trimmedClient.phone || !trimmedClient.email) {
+      alert("Имя, телефон и email не могут быть пустыми");
+      return;
+    }
+
     // Сохраняем обновлённые данные клиента в общем CRM-хранилище
-    updateClient(selectedClient.id, editForm);
+    updateClient(selectedClient.id, trimmedClient);
 
     // Выключаем режим редактирования
+    setIsEditing(false);
+  }
+
+  function handleCloseSelectedClient() {
+    setSelectedClientId(null);
     setIsEditing(false);
   }
 
@@ -171,7 +284,7 @@ export default function Clients({ setPage }) {
       <Sidebar activePage="clients" setPage={setPage} />
 
       <main className="content">
-        <Header />
+        <Header setPage={setPage} />
 
         <div className="page-header">
           <div>
@@ -185,43 +298,65 @@ export default function Clients({ setPage }) {
         </div>
 
         {showForm && (
-          <div className="modal-overlay">
-            <div className="client-modal">
-              <div className="modal-head">
-                <h2>Новый клиент</h2>
-                <button onClick={() => setShowForm(false)}>×</button>
-              </div>
+          <Modal title="Новый клиент" onClose={() => setShowForm(false)}>
+            <form className="client-form" onSubmit={handleAddClient}>
+              <label>
+                Имя клиента
+                <input
+                  name="name"
+                  value={clientForm.name}
+                  onChange={handleClientFormChange}
+                  placeholder="Иванов И.И."
+                  required
+                />
+              </label>
 
-              <form className="client-form" onSubmit={handleAddClient}>
-                <label>
-                  Имя клиента
-                  <input name="name" placeholder="Иванов И.И." required />
-                </label>
+              <label>
+                Телефон
+                <input
+                  name="phone"
+                  value={clientForm.phone}
+                  onChange={handleClientFormChange}
+                  placeholder="+48 500 111 222"
+                  required
+                />
+              </label>
 
-                <label>
-                  Телефон
-                  <input name="phone" placeholder="+48 500 111 222" required />
-                </label>
+              <label>
+                Email
+                <input
+                  name="email"
+                  type="email"
+                  value={clientForm.email}
+                  onChange={handleClientFormChange}
+                  placeholder="client@email.com"
+                  required
+                />
+              </label>
 
-                <label>
-                  Email
-                  <input name="email" placeholder="client@email.com" required />
-                </label>
+              <label>
+                Комментарий
+                <textarea
+                  name="comment"
+                  value={clientForm.comment}
+                  onChange={handleClientFormChange}
+                  placeholder="Предпочтения клиента, детали заказа..."
+                />
+              </label>
 
-                <label>
-                  Комментарий
-                  <textarea
-                    name="comment"
-                    placeholder="Предпочтения клиента, детали заказа..."
-                  />
-                </label>
+              <button type="submit" className="new-order-button">
+                Сохранить клиента
+              </button>
 
-                <button type="submit" className="new-order-button">
-                  Сохранить клиента
-                </button>
-              </form>
-            </div>
-          </div>
+              <button
+                type="button"
+                className="delete-client-button"
+                onClick={handleClearClientForm}
+              >
+                Очистить форму
+              </button>
+            </form>
+          </Modal>
         )}
 
         <input
@@ -230,6 +365,27 @@ export default function Clients({ setPage }) {
           value={search}
           onChange={(event) => setSearch(event.target.value)}
         />
+
+        <div
+          className="orders-card"
+          style={{ marginBottom: "24px", padding: "16px" }}
+        >
+          <h2>Сортировка</h2>
+
+          <select
+            className="client-search"
+            value={sortBy}
+            onChange={(event) => setSortBy(event.target.value)}
+            style={{ marginBottom: 0 }}
+          >
+            <option value="nameAsc">Имя А → Я</option>
+            <option value="nameDesc">Имя Я → А</option>
+            <option value="ordersDesc">Больше всего заказов</option>
+            <option value="ordersAsc">Меньше всего заказов</option>
+            <option value="newest">Сначала новые</option>
+            <option value="oldest">Сначала старые</option>
+          </select>
+        </div>
 
         <div className="clients-grid">
           {filteredClients.map((client) => (
@@ -246,136 +402,136 @@ export default function Clients({ setPage }) {
               <span>{client.orders} заказа</span>
             </div>
           ))}
+
+          {filteredClients.length === 0 && (
+  <EmptyState
+    title={clients.length === 0 ? "Пока нет клиентов" : "Клиенты не найдены"}
+    text={
+      clients.length === 0
+        ? "Добавь первого клиента, чтобы потом создавать заказы и примерки."
+        : "Попробуй изменить поисковый запрос или сортировку."
+    }
+    buttonText="+ Новый клиент"
+    onButtonClick={() => setShowForm(true)}
+  />
+)}
         </div>
 
         {selectedClient && (
-          <div className="modal-overlay">
-            <div className="client-modal">
-              <div className="modal-head">
-                <h2>{selectedClient.name}</h2>
+          <Modal title={selectedClient.name} onClose={handleCloseSelectedClient}>
+            {!isEditing ? (
+              <div className="client-details">
+                <p>
+                  <strong>Телефон:</strong> {selectedClient.phone}
+                </p>
+
+                <p>
+                  <strong>Email:</strong> {selectedClient.email}
+                </p>
+
+                <p>
+                  <strong>Заказы:</strong> {selectedClient.orders}
+                </p>
+
+                {selectedClient.comment && (
+                  <p>
+                    <strong>Комментарий:</strong> {selectedClient.comment}
+                  </p>
+                )}
+
+                <h3>Замеры клиента</h3>
+
+                <div className="measurements-grid">
+                  {Object.entries(measurementLabels).map(([key, label]) => (
+                    <label key={key}>
+                      {label}
+                      <input
+                        name={key}
+                        value={measurementForm[key]}
+                        onChange={handleMeasurementChange}
+                        placeholder="см"
+                      />
+                    </label>
+                  ))}
+                </div>
+
                 <button
-                  onClick={() => {
-                    setSelectedClientId(null);
-                    setIsEditing(false);
-                  }}
+                  className="new-order-button"
+                  onClick={handleSaveMeasurements}
                 >
-                  ×
+                  Сохранить замеры
+                </button>
+
+                <button
+                  className="new-order-button"
+                  onClick={handleStartEditClient}
+                >
+                  Редактировать клиента
+                </button>
+
+                <button
+                  className="delete-client-button"
+                  onClick={() => handleDeleteClient(selectedClient.id)}
+                >
+                  Удалить клиента
                 </button>
               </div>
+            ) : (
+              <form className="client-form" onSubmit={handleSaveEditedClient}>
+                <label>
+                  Имя клиента
+                  <input
+                    name="name"
+                    value={editForm.name}
+                    onChange={handleEditInputChange}
+                    required
+                  />
+                </label>
 
-              {!isEditing ? (
-                <div className="client-details">
-                  <p>
-                    <strong>Телефон:</strong> {selectedClient.phone}
-                  </p>
+                <label>
+                  Телефон
+                  <input
+                    name="phone"
+                    value={editForm.phone}
+                    onChange={handleEditInputChange}
+                    required
+                  />
+                </label>
 
-                  <p>
-                    <strong>Email:</strong> {selectedClient.email}
-                  </p>
+                <label>
+                  Email
+                  <input
+                    name="email"
+                    type="email"
+                    value={editForm.email}
+                    onChange={handleEditInputChange}
+                    required
+                  />
+                </label>
 
-                  <p>
-                    <strong>Заказы:</strong> {selectedClient.orders}
-                  </p>
+                <label>
+                  Комментарий
+                  <textarea
+                    name="comment"
+                    value={editForm.comment}
+                    onChange={handleEditInputChange}
+                  />
+                </label>
 
-                  {selectedClient.comment && (
-                    <p>
-                      <strong>Комментарий:</strong> {selectedClient.comment}
-                    </p>
-                  )}
+                <button type="submit" className="new-order-button">
+                  Сохранить изменения
+                </button>
 
-                  <h3>Замеры клиента</h3>
-
-                  <div className="measurements-grid">
-                    {Object.entries(measurementLabels).map(([key, label]) => (
-                      <label key={key}>
-                        {label}
-                        <input
-                          name={key}
-                          value={measurementForm[key]}
-                          onChange={handleMeasurementChange}
-                          placeholder="см"
-                        />
-                      </label>
-                    ))}
-                  </div>
-
-                  <button
-                    className="new-order-button"
-                    onClick={handleSaveMeasurements}
-                  >
-                    Сохранить замеры
-                  </button>
-
-                  <button
-                    className="new-order-button"
-                    onClick={handleStartEditClient}
-                  >
-                    Редактировать клиента
-                  </button>
-
-                  <button
-                    className="delete-client-button"
-                    onClick={() => handleDeleteClient(selectedClient.id)}
-                  >
-                    Удалить клиента
-                  </button>
-                </div>
-              ) : (
-                <form className="client-form" onSubmit={handleSaveEditedClient}>
-                  <label>
-                    Имя клиента
-                    <input
-                      name="name"
-                      value={editForm.name}
-                      onChange={handleEditInputChange}
-                      required
-                    />
-                  </label>
-
-                  <label>
-                    Телефон
-                    <input
-                      name="phone"
-                      value={editForm.phone}
-                      onChange={handleEditInputChange}
-                      required
-                    />
-                  </label>
-
-                  <label>
-                    Email
-                    <input
-                      name="email"
-                      value={editForm.email}
-                      onChange={handleEditInputChange}
-                      required
-                    />
-                  </label>
-
-                  <label>
-                    Комментарий
-                    <textarea
-                      name="comment"
-                      value={editForm.comment}
-                      onChange={handleEditInputChange}
-                    />
-                  </label>
-
-                  <button type="submit" className="new-order-button">
-                    Сохранить изменения
-                  </button>
-
-                  <button
-                    type="button"
-                    className="delete-client-button"
-                    onClick={() => setIsEditing(false)}
-                  >
-                    Отмена
-                  </button>
-                </form>
-              )}
-            </div>
-          </div>
+                <button
+                  type="button"
+                  className="delete-client-button"
+                  onClick={() => setIsEditing(false)}
+                >
+                  Отмена
+                </button>
+              </form>
+            )}
+          </Modal>
         )}
       </main>
     </div>

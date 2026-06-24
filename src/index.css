@@ -596,3 +596,419 @@ td {
   font-size: 15px;
   outline: none;
 }
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  z-index: 1000;
+}
+
+.client-modal {
+  width: min(720px, 100%);
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+}
+
+.orders-card {
+  overflow-x: auto;
+}
+
+.orders-card table {
+  min-width: 720px;
+}
+
+@media (max-width: 900px) {
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .stats-grid,
+  .clients-grid,
+  .measurements-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+  }
+
+  .page-header > div:last-child {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .new-order-button,
+  .delete-client-button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .client-modal {
+    width: 100%;
+  }
+}
+
+@media (max-width: 600px) {
+  .layout {
+    flex-direction: column;
+  }
+
+  .content {
+    padding: 16px;
+  }
+
+  .modal-overlay {
+    align-items: flex-start;
+    padding: 12px;
+  }
+
+  .client-modal {
+    max-height: calc(100vh - 24px);
+  }
+}
+/* ===== Header / верхняя панель ===== */
+
+.header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 32px;
+}
+
+.search {
+  flex: 1;
+  max-width: 520px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 12px 16px;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
+}
+
+.search span {
+  flex-shrink: 0;
+}
+
+.search input {
+  width: 100%;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 14px;
+  color: #111827;
+}
+
+.search input::placeholder {
+  color: #9ca3af;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.header-actions .icon-btn {
+  min-width: 44px;
+  height: 44px;
+  border: none;
+  border-radius: 14px;
+  background: #ffffff;
+  cursor: pointer;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.header-actions .new-order-button {
+  white-space: nowrap;
+}
+
+/* Чтобы Header нормально складывался на планшетах и телефонах */
+@media (max-width: 900px) {
+  .header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .search {
+    max-width: none;
+  }
+
+  .header-actions {
+    width: 100%;
+  }
+
+  .header-actions .new-order-button {
+    flex: 1;
+  }
+}
+
+@media (max-width: 600px) {
+  .header-actions {
+    flex-direction: column;
+  }
+
+  .header-actions .icon-btn,
+  .header-actions .new-order-button {
+    width: 100%;
+  }
+}
+/* ===== Final responsive polish ===== */
+
+/* Чтобы ширина элементов считалась предсказуемо */
+* {
+  box-sizing: border-box;
+}
+
+/* Основной контент не должен вылезать за экран */
+.content {
+  min-width: 0;
+}
+
+/* Верхние блоки с кнопками должны переноситься */
+.page-header {
+  gap: 16px;
+}
+
+.page-header > div:last-child {
+  flex-wrap: wrap;
+}
+
+/* Все поля формы занимают нормальную ширину */
+.client-form input,
+.client-form select,
+.client-form textarea,
+.client-search {
+  width: 100%;
+  max-width: 100%;
+}
+
+/* Длинные тексты в карточках не ломают сетку */
+.client-card,
+.orders-card,
+.panel-card,
+.stat-card {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* Таблицы не ломают страницу, а получают горизонтальный скролл */
+.orders-card {
+  overflow-x: auto;
+}
+
+.orders-card table {
+  width: 100%;
+  min-width: 760px;
+  border-collapse: collapse;
+}
+
+.orders-card th,
+.orders-card td {
+  white-space: nowrap;
+}
+
+/* Модальное окно должно помещаться по высоте */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  z-index: 1000;
+}
+
+.client-modal {
+  width: min(720px, 100%);
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+}
+
+/* Header */
+.header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 32px;
+}
+
+.search {
+  flex: 1;
+  max-width: 520px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 12px 16px;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
+}
+
+.search span {
+  flex-shrink: 0;
+}
+
+.search input {
+  width: 100%;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 14px;
+  color: #111827;
+}
+
+.search input::placeholder {
+  color: #9ca3af;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.header-actions .icon-btn {
+  min-width: 44px;
+  height: 44px;
+  border: none;
+  border-radius: 14px;
+  background: #ffffff;
+  cursor: pointer;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.header-actions .new-order-button {
+  white-space: nowrap;
+}
+
+/* Планшеты */
+@media (max-width: 1000px) {
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .stats-grid,
+  .clients-grid,
+  .measurements-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .right-panel {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+}
+
+/* Маленькие планшеты и большие телефоны */
+@media (max-width: 800px) {
+  .layout {
+    flex-direction: column;
+  }
+
+  .content {
+    padding: 20px;
+  }
+
+  .page-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .page-header > div:last-child {
+    width: 100%;
+    display: flex;
+  }
+
+  .page-header .new-order-button,
+  .page-header .delete-client-button {
+    flex: 1;
+  }
+
+  .header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .search {
+    max-width: none;
+  }
+
+  .header-actions {
+    width: 100%;
+  }
+
+  .header-actions .new-order-button {
+    flex: 1;
+  }
+
+  .right-panel {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Телефоны */
+@media (max-width: 600px) {
+  .content {
+    padding: 16px;
+  }
+
+  .stats-grid,
+  .clients-grid,
+  .measurements-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .header-actions {
+    flex-direction: column;
+  }
+
+  .header-actions .icon-btn,
+  .header-actions .new-order-button {
+    width: 100%;
+  }
+
+  .page-header > div:last-child {
+    flex-direction: column;
+  }
+
+  .page-header .new-order-button,
+  .page-header .delete-client-button {
+    width: 100%;
+  }
+
+  .modal-overlay {
+    align-items: flex-start;
+    padding: 12px;
+  }
+
+  .client-modal {
+    width: 100%;
+    max-height: calc(100vh - 24px);
+  }
+
+  .orders-card table {
+    min-width: 680px;
+  }
+}

@@ -1,30 +1,62 @@
-import { Plus, Users, Package, CreditCard, Calendar, BarChart3 } from "lucide-react";
+export default function QuickActions({ setPage }) {
+  // Переход на существующие страницы CRM
+  function goToPage(pageName) {
+    setPage(pageName);
+  }
 
-export default function QuickActions() {
-  const actions = [
-    { icon: Plus, label: "Новый заказ" },
-    { icon: Users, label: "Клиенты" },
-    { icon: Package, label: "Изделия" },
-    { icon: CreditCard, label: "Платежи" },
-    { icon: Calendar, label: "Календарь" },
-    { icon: BarChart3, label: "Отчёты" },
-  ];
+  // Временное сообщение для разделов, которые мы ещё не создавали
+  function showComingSoon(sectionName) {
+    alert(`Раздел "${sectionName}" будет добавлен позже`);
+  }
 
   return (
-    <div className="quick-card">
-      <h2>Быстрый доступ</h2>
+    <div className="orders-card">
+      <div className="card-head">
+        <h2>Быстрые действия</h2>
+      </div>
 
-      <div className="quick-grid">
-        {actions.map((action) => {
-          const Icon = action.icon;
+      <div className="measurements-grid">
+        <button
+          className="new-order-button"
+          onClick={() => goToPage("orders")}
+        >
+          + Новый заказ
+        </button>
 
-          return (
-            <button className="quick-action" key={action.label}>
-              <Icon size={28} />
-              <span>{action.label}</span>
-            </button>
-          );
-        })}
+        <button
+          className="new-order-button"
+          onClick={() => goToPage("clients")}
+        >
+          Клиенты
+        </button>
+
+        <button
+          className="new-order-button"
+          onClick={() => showComingSoon("Изделия")}
+        >
+          Изделия
+        </button>
+
+        <button
+          className="new-order-button"
+          onClick={() => showComingSoon("Платежи")}
+        >
+          Платежи
+        </button>
+
+        <button
+          className="new-order-button"
+          onClick={() => goToPage("fittings")}
+        >
+          Примерки
+        </button>
+
+        <button
+          className="new-order-button"
+          onClick={() => goToPage("settings")}
+        >
+          Отчёты / Экспорт
+        </button>
       </div>
     </div>
   );

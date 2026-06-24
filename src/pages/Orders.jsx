@@ -1,11 +1,22 @@
 import { useState } from "react";
 import Sidebar from "../components/Sidebar";
 import Header from "../components/Header";
+import Modal from "../components/Modal";
+import EmptyState from "../components/EmptyState";
 import { useCrm } from "../context/CrmContext";
 import { normalizePrice, validateOrderData } from "../utils/validators";
+import { parseCrmDate, parsePrice } from "../utils/dateUtils";
+
+const emptyOrderForm = {
+  client: "",
+  product: "",
+  price: "",
+  status: "В работе",
+  deadline: "",
+  comment: "",
+};
 
 export default function Orders({ setPage }) {
-  // Берем данные и функции из общего CRM-хранилища
   const {
     orders,
     clients,
@@ -15,36 +26,23 @@ export default function Orders({ setPage }) {
     updateOrderStatus,
   } = useCrm();
 
-  // Показывать или скрывать форму создания заказа
   const [showForm, setShowForm] = useState(false);
-
-  // Показывать или скрывать форму редактирования заказа
   const [isEditing, setIsEditing] = useState(false);
 
-  // Текст поиска по заказам
   const [search, setSearch] = useState("");
-
-  // Активный фильтр по статусу заказа
   const [statusFilter, setStatusFilter] = useState("Все");
+  const [sortBy, setSortBy] = useState("deadlineAsc");
 
-  // id заказа, который пользователь открыл кликом
   const [selectedOrderId, setSelectedOrderId] = useState(null);
 
-  // Данные формы редактирования заказа
-  const [editForm, setEditForm] = useState({
-    client: "",
-    product: "",
-    price: "",
-    status: "В работе",
-    deadline: "",
-    comment: "",
-  });
+  // Черновик нового заказа не очищается при закрытии окна
+  const [orderForm, setOrderForm] = useState(emptyOrderForm);
 
-  // Находим открытый заказ по id.
-  // Так карточка будет обновляться после изменения статуса или редактирования.
+  // Данные формы редактирования заказа
+  const [editForm, setEditForm] = useState(emptyOrderForm);
+
   const selectedOrder = orders.find((order) => order.id === selectedOrderId);
 
-  // Считаем количество заказов по статусам для кнопок фильтра
   const statusCounts = {
     Все: orders.length,
     "В работе": orders.filter((order) => order.status === "В работе").length,
@@ -52,34 +50,94 @@ export default function Orders({ setPage }) {
     Готово: orders.filter((order) => order.status === "Готово").length,
   };
 
-  // Фильтруем заказы по поиску и по выбранному статусу
-  const filteredOrders = orders.filter((order) => {
-    const searchText = search.toLowerCase();
+  // Здесь одновременно работают поиск, фильтр и сортировка
+  const filteredOrders = orders
+    .filter((order) => {
+      const searchText = search.toLowerCase();
 
-    const matchesSearch =
-      order.id.toLowerCase().includes(searchText) ||
-      order.client.toLowerCase().includes(searchText) ||
-      order.product.toLowerCase().includes(searchText) ||
-      order.status.toLowerCase().includes(searchText);
+      const matchesSearch =
+        order.id.toLowerCase().includes(searchText) ||
+        order.client.toLowerCase().includes(searchText) ||
+        order.product.toLowerCase().includes(searchText) ||
+        order.status.toLowerCase().includes(searchText);
 
-    const matchesStatus =
-      statusFilter === "Все" || order.status === statusFilter;
+      const matchesStatus =
+        statusFilter === "Все" || order.status === statusFilter;
 
-    return matchesSearch && matchesStatus;
-  });
+      return matchesSearch && matchesStatus;
+    })
+    .sort((firstOrder, secondOrder) => {
+      if (sortBy === "deadlineAsc") {
+        const firstDate = parseCrmDate(firstOrder.deadline);
+        const secondDate = parseCrmDate(secondOrder.deadline);
+
+        return (firstDate?.getTime() || 0) - (secondDate?.getTime() || 0);
+      }
+
+      if (sortBy === "deadlineDesc") {
+        const firstDate = parseCrmDate(firstOrder.deadline);
+        const secondDate = parseCrmDate(secondOrder.deadline);
+
+        return (secondDate?.getTime() || 0) - (firstDate?.getTime() || 0);
+      }
+
+      if (sortBy === "priceDesc") {
+        return parsePrice(secondOrder.price) - parsePrice(firstOrder.price);
+      }
+
+      if (sortBy === "priceAsc") {
+        return parsePrice(firstOrder.price) - parsePrice(secondOrder.price);
+      }
+
+      if (sortBy === "status") {
+        return firstOrder.status.localeCompare(secondOrder.status, "ru");
+      }
+
+      if (sortBy === "newest") {
+        return String(secondOrder.id).localeCompare(String(firstOrder.id));
+      }
+
+      if (sortBy === "oldest") {
+        return String(firstOrder.id).localeCompare(String(secondOrder.id));
+      }
+
+      return 0;
+    });
+
+  function handleOpenNewOrderForm() {
+    // Нельзя создать заказ без клиента
+    if (clients.length === 0) {
+      alert("Сначала добавь хотя бы одного клиента");
+      setPage("clients");
+      return;
+    }
+
+    setShowForm(true);
+  }
+
+  function handleOrderFormChange(event) {
+    const { name, value } = event.target;
+
+    setOrderForm((currentForm) => ({
+      ...currentForm,
+      [name]: value,
+    }));
+  }
+
+  function handleClearOrderForm() {
+    setOrderForm(emptyOrderForm);
+  }
 
   function handleAddOrder(event) {
     event.preventDefault();
 
-    const formData = new FormData(event.currentTarget);
-
     const newOrder = {
-      client: formData.get("client"),
-      product: formData.get("product"),
-      price: formData.get("price"),
-      status: formData.get("status"),
-      deadline: formData.get("deadline"),
-      comment: formData.get("comment"),
+      client: orderForm.client,
+      product: orderForm.product.trim(),
+      price: orderForm.price,
+      status: orderForm.status,
+      deadline: orderForm.deadline.trim(),
+      comment: orderForm.comment.trim(),
     };
 
     // Проверяем данные перед созданием заказа
@@ -90,12 +148,14 @@ export default function Orders({ setPage }) {
       return;
     }
 
-    // Нормализуем цену, чтобы она всегда была в виде "500 €"
+    // Нормализуем цену: "500" -> "500 €"
     addOrder({
       ...newOrder,
       price: normalizePrice(newOrder.price),
     });
 
+    // После успешного создания очищаем форму
+    setOrderForm(emptyOrderForm);
     setShowForm(false);
   }
 
@@ -110,15 +170,13 @@ export default function Orders({ setPage }) {
   }
 
   function handleChangeStatus(orderId, newStatus) {
-    // Меняем статус в общем CRM-хранилище
     updateOrderStatus(orderId, newStatus);
   }
 
   function handleStartEdit(order) {
-    // Открываем режим редактирования
     setIsEditing(true);
 
-    // Заполняем форму текущими данными заказа
+    // Убираем знак €, чтобы в поле редактировалось только число
     setEditForm({
       client: order.client,
       product: order.product,
@@ -143,7 +201,6 @@ export default function Orders({ setPage }) {
 
     if (!selectedOrder) return;
 
-    // Проверяем данные перед сохранением изменений
     const validationError = validateOrderData(editForm);
 
     if (validationError) {
@@ -151,7 +208,6 @@ export default function Orders({ setPage }) {
       return;
     }
 
-    // Сохраняем обновленный заказ в общем CRM-хранилище
     updateOrder(selectedOrder.id, {
       ...editForm,
       price: normalizePrice(editForm.price),
@@ -160,9 +216,14 @@ export default function Orders({ setPage }) {
     setIsEditing(false);
   }
 
+  function handleCloseSelectedOrder() {
+    setSelectedOrderId(null);
+    setIsEditing(false);
+  }
+
   function escapeCsvValue(value) {
-    // CSV ломается, если внутри значения есть запятая, кавычки или перенос строки.
-    // Поэтому такие значения оборачиваем в кавычки и экранируем внутренние кавычки.
+    // CSV ломается от запятых, кавычек и переносов строк,
+    // поэтому такие значения оборачиваем в кавычки
     const stringValue = String(value ?? "");
 
     if (
@@ -177,7 +238,6 @@ export default function Orders({ setPage }) {
   }
 
   function handleExportOrdersCsv() {
-    // Заголовки колонок CSV
     const headers = [
       "Номер заказа",
       "Клиент",
@@ -188,8 +248,7 @@ export default function Orders({ setPage }) {
       "Комментарий",
     ];
 
-    // Экспортируем именно отфильтрованные заказы,
-    // чтобы можно было выгрузить, например, только "Готово"
+    // Экспортируем именно то, что сейчас видно в таблице
     const rows = filteredOrders.map((order) => [
       order.id,
       order.client,
@@ -204,7 +263,7 @@ export default function Orders({ setPage }) {
       .map((row) => row.map(escapeCsvValue).join(","))
       .join("\n");
 
-    // BOM нужен, чтобы Excel корректно открыл кириллицу
+    // BOM нужен, чтобы Excel нормально открывал кириллицу
     const file = new Blob([`\uFEFF${csvContent}`], {
       type: "text/csv;charset=utf-8;",
     });
@@ -224,7 +283,7 @@ export default function Orders({ setPage }) {
       <Sidebar activePage="orders" setPage={setPage} />
 
       <main className="content">
-        <Header />
+        <Header setPage={setPage} />
 
         <div className="page-header">
           <div>
@@ -240,75 +299,103 @@ export default function Orders({ setPage }) {
               Экспорт CSV
             </button>
 
-            <button
-              className="new-order-button"
-              onClick={() => setShowForm(true)}
-            >
+            <button className="new-order-button" onClick={handleOpenNewOrderForm}>
               + Новый заказ
             </button>
           </div>
         </div>
 
         {showForm && (
-          <div className="modal-overlay">
-            <div className="client-modal">
-              <div className="modal-head">
-                <h2>Новый заказ</h2>
-                <button onClick={() => setShowForm(false)}>×</button>
-              </div>
+          <Modal title="Новый заказ" onClose={() => setShowForm(false)}>
+            <form className="client-form" onSubmit={handleAddOrder}>
+              <label>
+                Клиент
+                <select
+                  name="client"
+                  value={orderForm.client}
+                  onChange={handleOrderFormChange}
+                  required
+                >
+                  <option value="">Выберите клиента</option>
 
-              <form className="client-form" onSubmit={handleAddOrder}>
-                <label>
-                  Клиент
-                  <select name="client" required>
-                    <option value="">Выберите клиента</option>
+                  {clients.map((client) => (
+                    <option key={client.id} value={client.name}>
+                      {client.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
 
-                    {clients.map((client) => (
-                      <option key={client.id} value={client.name}>
-                        {client.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+              <label>
+                Изделие
+                <input
+                  name="product"
+                  value={orderForm.product}
+                  onChange={handleOrderFormChange}
+                  placeholder="Пиджак"
+                  required
+                />
+              </label>
 
-                <label>
-                  Изделие
-                  <input name="product" placeholder="Пиджак" required />
-                </label>
+              <label>
+                Стоимость
+                <input
+                  name="price"
+                  value={orderForm.price}
+                  onChange={handleOrderFormChange}
+                  placeholder="500"
+                  required
+                />
+              </label>
 
-                <label>
-                  Стоимость
-                  <input name="price" placeholder="500" required />
-                </label>
+              <label>
+                Статус
+                <select
+                  name="status"
+                  value={orderForm.status}
+                  onChange={handleOrderFormChange}
+                  required
+                >
+                  <option>В работе</option>
+                  <option>Примерка</option>
+                  <option>Готово</option>
+                </select>
+              </label>
 
-                <label>
-                  Статус
-                  <select name="status" required>
-                    <option>В работе</option>
-                    <option>Примерка</option>
-                    <option>Готово</option>
-                  </select>
-                </label>
+              <label>
+                Срок
+                <input
+                  name="deadline"
+                  value={orderForm.deadline}
+                  onChange={handleOrderFormChange}
+                  placeholder="20.07.2026 или 2026-07-20"
+                  required
+                />
+              </label>
 
-                <label>
-                  Срок
-                  <input name="deadline" placeholder="20.07.2026" required />
-                </label>
+              <label>
+                Комментарий к заказу
+                <textarea
+                  name="comment"
+                  value={orderForm.comment}
+                  onChange={handleOrderFormChange}
+                  placeholder="Например: укоротить рукава, добавить подкладку..."
+                />
+              </label>
 
-                <label>
-                  Комментарий к заказу
-                  <textarea
-                    name="comment"
-                    placeholder="Например: укоротить рукава, добавить подкладку..."
-                  />
-                </label>
+              <button type="submit" className="new-order-button">
+                Создать заказ
+              </button>
 
-                <button type="submit" className="new-order-button">
-                  Создать заказ
-                </button>
-              </form>
-            </div>
-          </div>
+              <button
+                type="button"
+                className="delete-client-button"
+                onClick={handleClearOrderForm}
+              >
+                Очистить форму
+              </button>
+            </form>
+          </Modal>
         )}
 
         <input
@@ -341,239 +428,259 @@ export default function Orders({ setPage }) {
           </div>
         </div>
 
+        <div
+          className="orders-card"
+          style={{ marginBottom: "24px", padding: "16px" }}
+        >
+          <h2>Сортировка</h2>
+
+          <select
+            className="client-search"
+            value={sortBy}
+            onChange={(event) => setSortBy(event.target.value)}
+            style={{ marginBottom: 0 }}
+          >
+            <option value="deadlineAsc">Сначала ближайший срок</option>
+            <option value="deadlineDesc">Сначала дальний срок</option>
+            <option value="priceDesc">Сначала дорогие</option>
+            <option value="priceAsc">Сначала дешёвые</option>
+            <option value="status">По статусу</option>
+            <option value="newest">Сначала новые</option>
+            <option value="oldest">Сначала старые</option>
+          </select>
+        </div>
+
         <div className="orders-card">
-          <table>
-            <thead>
-              <tr>
-                <th>№</th>
-                <th>Клиент</th>
-                <th>Изделие</th>
-                <th>Стоимость</th>
-                <th>Статус</th>
-                <th>Срок</th>
-                <th>Действия</th>
-              </tr>
-            </thead>
-
-            <tbody>
-              {filteredOrders.map((order) => (
-                <tr
-                  key={order.id}
-                  onClick={() => {
-                    setSelectedOrderId(order.id);
-                    setIsEditing(false);
-                  }}
-                  style={{ cursor: "pointer" }}
-                >
-                  <td>{order.id}</td>
-                  <td>{order.client}</td>
-                  <td>{order.product}</td>
-                  <td>{order.price}</td>
-                  <td>
-                    <span className={`status ${order.statusClass}`}>
-                      {order.status}
-                    </span>
-                  </td>
-                  <td>{order.deadline}</td>
-                  <td>
-                    <button
-                      className="delete-client-button"
-                      onClick={(event) => {
-                        // Чтобы кнопка удаления не открывала карточку заказа
-                        event.stopPropagation();
-                        handleDeleteOrder(order.id);
-                      }}
-                    >
-                      Удалить
-                    </button>
-                  </td>
+          {filteredOrders.length > 0 ? (
+            <table>
+              <thead>
+                <tr>
+                  <th>№</th>
+                  <th>Клиент</th>
+                  <th>Изделие</th>
+                  <th>Стоимость</th>
+                  <th>Статус</th>
+                  <th>Срок</th>
+                  <th>Действия</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
 
-          {filteredOrders.length === 0 && (
-            <p style={{ padding: "24px", color: "#777" }}>Заказы не найдены</p>
+              <tbody>
+                {filteredOrders.map((order) => (
+                  <tr
+                    key={order.id}
+                    onClick={() => {
+                      setSelectedOrderId(order.id);
+                      setIsEditing(false);
+                    }}
+                    style={{ cursor: "pointer" }}
+                  >
+                    <td>{order.id}</td>
+                    <td>{order.client}</td>
+                    <td>{order.product}</td>
+                    <td>{order.price}</td>
+                    <td>
+                      <span className={`status ${order.statusClass}`}>
+                        {order.status}
+                      </span>
+                    </td>
+                    <td>{order.deadline}</td>
+                    <td>
+                      <button
+                        className="delete-client-button"
+                        onClick={(event) => {
+                          // Чтобы кнопка удаления не открывала карточку заказа
+                          event.stopPropagation();
+                          handleDeleteOrder(order.id);
+                        }}
+                      >
+                        Удалить
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <EmptyState
+              title={orders.length === 0 ? "Пока нет заказов" : "Заказы не найдены"}
+              text={
+                orders.length === 0
+                  ? "Создай первый заказ для клиента, чтобы начать вести работу ателье."
+                  : "Попробуй изменить поиск, фильтр или сортировку."
+              }
+              buttonText="+ Новый заказ"
+              onButtonClick={handleOpenNewOrderForm}
+            />
           )}
         </div>
 
         {selectedOrder && (
-          <div className="modal-overlay">
-            <div className="client-modal">
-              <div className="modal-head">
-                <h2>Заказ {selectedOrder.id}</h2>
-                <button
-                  onClick={() => {
-                    setSelectedOrderId(null);
-                    setIsEditing(false);
-                  }}
-                >
-                  ×
-                </button>
-              </div>
+          <Modal
+            title={`Заказ ${selectedOrder.id}`}
+            onClose={handleCloseSelectedOrder}
+          >
+            {!isEditing ? (
+              <div className="client-details">
+                <p>
+                  <strong>Клиент:</strong> {selectedOrder.client}
+                </p>
 
-              {!isEditing ? (
-                <div className="client-details">
+                <p>
+                  <strong>Изделие:</strong> {selectedOrder.product}
+                </p>
+
+                <p>
+                  <strong>Стоимость:</strong> {selectedOrder.price}
+                </p>
+
+                <p>
+                  <strong>Статус:</strong>{" "}
+                  <span className={`status ${selectedOrder.statusClass}`}>
+                    {selectedOrder.status}
+                  </span>
+                </p>
+
+                <p>
+                  <strong>Срок:</strong> {selectedOrder.deadline}
+                </p>
+
+                {selectedOrder.comment && (
                   <p>
-                    <strong>Клиент:</strong> {selectedOrder.client}
+                    <strong>Комментарий:</strong> {selectedOrder.comment}
                   </p>
+                )}
 
-                  <p>
-                    <strong>Изделие:</strong> {selectedOrder.product}
-                  </p>
+                <h3>Изменить статус</h3>
 
-                  <p>
-                    <strong>Стоимость:</strong> {selectedOrder.price}
-                  </p>
-
-                  <p>
-                    <strong>Статус:</strong>{" "}
-                    <span className={`status ${selectedOrder.statusClass}`}>
-                      {selectedOrder.status}
-                    </span>
-                  </p>
-
-                  <p>
-                    <strong>Срок:</strong> {selectedOrder.deadline}
-                  </p>
-
-                  {selectedOrder.comment && (
-                    <p>
-                      <strong>Комментарий:</strong> {selectedOrder.comment}
-                    </p>
-                  )}
-
-                  <h3>Изменить статус</h3>
-
-                  <div className="measurements-grid">
-                    <button
-                      className="new-order-button"
-                      onClick={() =>
-                        handleChangeStatus(selectedOrder.id, "В работе")
-                      }
-                    >
-                      В работе
-                    </button>
-
-                    <button
-                      className="new-order-button"
-                      onClick={() =>
-                        handleChangeStatus(selectedOrder.id, "Примерка")
-                      }
-                    >
-                      Примерка
-                    </button>
-
-                    <button
-                      className="new-order-button"
-                      onClick={() =>
-                        handleChangeStatus(selectedOrder.id, "Готово")
-                      }
-                    >
-                      Готово
-                    </button>
-                  </div>
+                <div className="measurements-grid">
+                  <button
+                    className="new-order-button"
+                    onClick={() =>
+                      handleChangeStatus(selectedOrder.id, "В работе")
+                    }
+                  >
+                    В работе
+                  </button>
 
                   <button
                     className="new-order-button"
-                    onClick={() => handleStartEdit(selectedOrder)}
+                    onClick={() =>
+                      handleChangeStatus(selectedOrder.id, "Примерка")
+                    }
                   >
-                    Редактировать заказ
+                    Примерка
                   </button>
 
                   <button
-                    className="delete-client-button"
-                    onClick={() => handleDeleteOrder(selectedOrder.id)}
+                    className="new-order-button"
+                    onClick={() =>
+                      handleChangeStatus(selectedOrder.id, "Готово")
+                    }
                   >
-                    Удалить заказ
+                    Готово
                   </button>
                 </div>
-              ) : (
-                <form className="client-form" onSubmit={handleSaveEditedOrder}>
-                  <label>
-                    Клиент
-                    <select
-                      name="client"
-                      value={editForm.client}
-                      onChange={handleEditInputChange}
-                      required
-                    >
-                      {clients.map((client) => (
-                        <option key={client.id} value={client.name}>
-                          {client.name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
 
-                  <label>
-                    Изделие
-                    <input
-                      name="product"
-                      value={editForm.product}
-                      onChange={handleEditInputChange}
-                      required
-                    />
-                  </label>
+                <button
+                  className="new-order-button"
+                  onClick={() => handleStartEdit(selectedOrder)}
+                >
+                  Редактировать заказ
+                </button>
 
-                  <label>
-                    Стоимость
-                    <input
-                      name="price"
-                      value={editForm.price}
-                      onChange={handleEditInputChange}
-                      required
-                    />
-                  </label>
-
-                  <label>
-                    Статус
-                    <select
-                      name="status"
-                      value={editForm.status}
-                      onChange={handleEditInputChange}
-                      required
-                    >
-                      <option>В работе</option>
-                      <option>Примерка</option>
-                      <option>Готово</option>
-                    </select>
-                  </label>
-
-                  <label>
-                    Срок
-                    <input
-                      name="deadline"
-                      value={editForm.deadline}
-                      onChange={handleEditInputChange}
-                      required
-                    />
-                  </label>
-
-                  <label>
-                    Комментарий
-                    <textarea
-                      name="comment"
-                      value={editForm.comment}
-                      onChange={handleEditInputChange}
-                    />
-                  </label>
-
-                  <button type="submit" className="new-order-button">
-                    Сохранить изменения
-                  </button>
-
-                  <button
-                    type="button"
-                    className="delete-client-button"
-                    onClick={() => setIsEditing(false)}
+                <button
+                  className="delete-client-button"
+                  onClick={() => handleDeleteOrder(selectedOrder.id)}
+                >
+                  Удалить заказ
+                </button>
+              </div>
+            ) : (
+              <form className="client-form" onSubmit={handleSaveEditedOrder}>
+                <label>
+                  Клиент
+                  <select
+                    name="client"
+                    value={editForm.client}
+                    onChange={handleEditInputChange}
+                    required
                   >
-                    Отмена
-                  </button>
-                </form>
-              )}
-            </div>
-          </div>
+                    {clients.map((client) => (
+                      <option key={client.id} value={client.name}>
+                        {client.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label>
+                  Изделие
+                  <input
+                    name="product"
+                    value={editForm.product}
+                    onChange={handleEditInputChange}
+                    required
+                  />
+                </label>
+
+                <label>
+                  Стоимость
+                  <input
+                    name="price"
+                    value={editForm.price}
+                    onChange={handleEditInputChange}
+                    required
+                  />
+                </label>
+
+                <label>
+                  Статус
+                  <select
+                    name="status"
+                    value={editForm.status}
+                    onChange={handleEditInputChange}
+                    required
+                  >
+                    <option>В работе</option>
+                    <option>Примерка</option>
+                    <option>Готово</option>
+                  </select>
+                </label>
+
+                <label>
+                  Срок
+                  <input
+                    name="deadline"
+                    value={editForm.deadline}
+                    onChange={handleEditInputChange}
+                    required
+                  />
+                </label>
+
+                <label>
+                  Комментарий
+                  <textarea
+                    name="comment"
+                    value={editForm.comment}
+                    onChange={handleEditInputChange}
+                  />
+                </label>
+
+                <button type="submit" className="new-order-button">
+                  Сохранить изменения
+                </button>
+
+                <button
+                  type="button"
+                  className="delete-client-button"
+                  onClick={() => setIsEditing(false)}
+                >
+                  Отмена
+                </button>
+              </form>
+            )}
+          </Modal>
         )}
       </main>
     </div>

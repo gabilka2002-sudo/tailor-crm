@@ -1,4 +1,5 @@
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+/* eslint-disable react-refresh/only-export-components */
+import { createContext, useContext, useEffect, useState } from "react";
 import {
   initialClients,
   initialOrders,
@@ -323,33 +324,30 @@ export function CrmProvider({ children }) {
   };
 
   // Всё, что мы передаем другим компонентам через useCrm()
-  const value = useMemo(
-    () => ({
-      clients,
-      orders,
-      fittings,
+  const value = {
+  clients,
+  orders,
+  fittings,
 
-      addClient,
-      updateClient,
-      deleteClient,
-      updateClientMeasurements,
+  addClient,
+  updateClient,
+  deleteClient,
+  updateClientMeasurements,
 
-      addOrder,
-      updateOrder,
-      deleteOrder,
-      updateOrderStatus,
+  addOrder,
+  updateOrder,
+  deleteOrder,
+  updateOrderStatus,
 
-      addFitting,
-      updateFitting,
-      updateFittingStatus,
-      deleteFitting,
+  addFitting,
+  updateFitting,
+  updateFittingStatus,
+  deleteFitting,
 
-      exportCrmData,
-      importCrmData,
-      resetCrmData,
-    }),
-    [clients, orders, fittings]
-  );
+  exportCrmData,
+  importCrmData,
+  resetCrmData,
+};
 
   return <CrmContext.Provider value={value}>{children}</CrmContext.Provider>;
 }

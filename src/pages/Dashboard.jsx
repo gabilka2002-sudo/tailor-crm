@@ -2,9 +2,9 @@ import Sidebar from "../components/Sidebar";
 import Header from "../components/Header";
 import StatsCards from "../components/StatsCards";
 import OrdersTable from "../components/OrdersTable";
-import RightPanel from "../components/RightPanel";
-import QuickActions from "../components/QuickActions";
 import ClientsPreview from "../components/ClientsPreview";
+import QuickActions from "../components/QuickActions";
+import RightPanel from "../components/RightPanel";
 
 export default function Dashboard({ setPage }) {
   return (
@@ -12,26 +12,27 @@ export default function Dashboard({ setPage }) {
       <Sidebar activePage="dashboard" setPage={setPage} />
 
       <main className="content">
-        <Header />
+        <Header setPage={setPage} />
 
-        <h1>Панель управления</h1>
-        <p>Обзор ателье</p>
+        <div className="page-header">
+          <div>
+            <h1>Панель управления</h1>
+            <p>Обзор работы ателье и быстрые действия</p>
+          </div>
+        </div>
+
+        <StatsCards />
 
         <div className="dashboard-grid">
-          <section>
-            {/* Карточки статистики теперь берут реальные данные из CrmContext */}
-            <StatsCards />
-
-            {/* Таблица последних заказов теперь тоже показывает реальные заказы */}
+          <div>
             <OrdersTable />
+            <QuickActions setPage={setPage} />
+          </div>
 
-            <QuickActions />
-
-            {/* Последние клиенты теперь берутся из общего CRM-хранилища */}
+          <div>
             <ClientsPreview setPage={setPage} />
-          </section>
-
-          <RightPanel />
+            <RightPanel />
+          </div>
         </div>
       </main>
     </div>

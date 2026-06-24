@@ -42,7 +42,7 @@ export function validateOrderData(orderData) {
   }
 
   if (!isValidPrice(orderData.price)) {
-    return "Стоимость должна быть числом";
+    return "Стоимость должна быть числом больше нуля";
   }
 
   if (!isNotEmpty(orderData.status)) {
