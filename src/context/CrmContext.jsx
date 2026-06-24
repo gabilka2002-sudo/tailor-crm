@@ -1,363 +1,507 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useEffect, useState } from "react";
 import {
-  initialClients,
-  initialOrders,
-  initialFittings,
-} from "../data/initialData";
+  getClients,
+  createClient,
+  updateClient as updateClientApi,
+  deleteClient as deleteClientApi,
+  getOrders,
+  createOrder,
+  updateOrder as updateOrderApi,
+  updateOrderStatus as updateOrderStatusApi,
+  deleteOrder as deleteOrderApi,
+  getFittings,
+  createFitting,
+  updateFitting as updateFittingApi,
+  updateFittingStatus as updateFittingStatusApi,
+  deleteFitting as deleteFittingApi,
+} from "../api/crmApi";
+import {
+  adaptClientFromApi,
+  adaptClientToApi,
+  adaptOrderFromApi,
+  adaptOrderToApi,
+  adaptFittingFromApi,
+  adaptFittingToApi,
+} from "../api/adapters";
+import { useToast } from "./ToastContext.jsx";
+import { LoadingState, ErrorState } from "../components/AppState.jsx";
 
 const CrmContext = createContext(null);
 
-const STORAGE_KEY = "tailor-crm-state";
-
-// Определяем CSS-класс для цвета статуса заказа
-function getStatusClass(status) {
-  if (status === "Готово") return "green";
-  if (status === "Примерка") return "purple";
-  return "blue";
-}
-
-// Загружаем данные из localStorage.
-// Если данных нет — используем стартовые данные из initialData.js
-function getInitialState() {
-  const savedState = localStorage.getItem(STORAGE_KEY);
-
-  if (!savedState) {
-    return {
-      clients: initialClients,
-      orders: initialOrders,
-      fittings: initialFittings,
-    };
-  }
-
-  try {
-    const parsedState = JSON.parse(savedState);
-
-    return {
-      clients: parsedState.clients || initialClients,
-      orders: parsedState.orders || initialOrders,
-      fittings: parsedState.fittings || initialFittings,
-    };
-  } catch {
-    return {
-      clients: initialClients,
-      orders: initialOrders,
-      fittings: initialFittings,
-    };
-  }
-}
-
-// Генерируем следующий номер заказа: #001, #002, #003...
-function getNextOrderId(orders) {
-  const maxNumber = orders.reduce((max, order) => {
-    const number = Number(String(order.id).replace("#", ""));
-    return Number.isNaN(number) ? max : Math.max(max, number);
-  }, 0);
-
-  return `#${String(maxNumber + 1).padStart(3, "0")}`;
-}
-
 export function CrmProvider({ children }) {
-  const initialState = getInitialState();
+  const { showToast } = useToast();
 
-  // Общий список клиентов
-  const [clients, setClients] = useState(initialState.clients);
+  const [clients, setClients] = useState([]);
+  const [orders, setOrders] = useState([]);
+  const [fittings, setFittings] = useState([]);
 
-  // Общий список заказов
-  const [orders, setOrders] = useState(initialState.orders);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
-  // Общий список примерок
-  const [fittings, setFittings] = useState(initialState.fittings);
-
-  // Автоматически сохраняем клиентов, заказы и примерки в браузер
   useEffect(() => {
-    localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({
-        clients,
-        orders,
-        fittings,
-      })
-    );
-  }, [clients, orders, fittings]);
+    loadCrmData();
+  }, []);
 
-  // Добавляет нового клиента
-  const addClient = (clientData) => {
-    const newClient = {
-      id: Date.now(),
-      name: clientData.name,
-      phone: clientData.phone,
-      email: clientData.email,
-      comment: clientData.comment || "",
-      orders: 0,
-      measurements: {
-        shoulders: "",
-        chest: "",
-        waist: "",
-        hips: "",
-        sleeve: "",
-        length: "",
-        neck: "",
-        height: "",
-      },
-    };
+  async function loadCrmData() {
+    try {
+      setLoading(true);
+      setError("");
 
-    setClients((currentClients) => [newClient, ...currentClients]);
-  };
+      const [clientsFromApi, ordersFromApi, fittingsFromApi] =
+        await Promise.all([getClients(), getOrders(), getFittings()]);
 
-  // Обновляет основные данные клиента
-  const updateClient = (clientId, updatedData) => {
-    setClients((currentClients) =>
-      currentClients.map((client) =>
-        client.id === clientId
-          ? {
-              ...client,
-              name: updatedData.name,
-              phone: updatedData.phone,
-              email: updatedData.email,
-              comment: updatedData.comment || "",
+      setClients(clientsFromApi.map(adaptClientFromApi));
+      setOrders(ordersFromApi.map(adaptOrderFromApi));
+      setFittings(fittingsFromApi.map(adaptFittingFromApi));
+    } catch (apiError) {
+      setError(apiError.message || "Не удалось загрузить данные CRM");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function addClient(clientData) {
+    try {
+      setError("");
+
+      const createdClient = await createClient(adaptClientToApi(clientData));
+
+      setClients((currentClients) => [
+        adaptClientFromApi(createdClient),
+        ...currentClients,
+      ]);
+
+      showToast("Клиент создан", "success");
+    } catch (apiError) {
+      setError(apiError.message || "Не удалось создать клиента");
+      showToast(apiError.message || "Не удалось создать клиента", "error");
+    }
+  }
+
+  async function updateClient(clientId, updatedData) {
+    try {
+      setError("");
+
+      const updatedClient = await updateClientApi(
+        clientId,
+        adaptClientToApi(updatedData)
+      );
+
+      const adaptedClient = adaptClientFromApi(updatedClient);
+
+      setClients((currentClients) =>
+        currentClients.map((client) =>
+          client.id === clientId ? adaptedClient : client
+        )
+      );
+
+      if (updatedData.oldName && updatedData.oldName !== updatedData.name) {
+        setOrders((currentOrders) =>
+          currentOrders.map((order) =>
+            order.client === updatedData.oldName
+              ? { ...order, client: updatedData.name }
+              : order
+          )
+        );
+
+        setFittings((currentFittings) =>
+          currentFittings.map((fitting) =>
+            fitting.client === updatedData.oldName
+              ? { ...fitting, client: updatedData.name }
+              : fitting
+          )
+        );
+      }
+
+      showToast("Клиент обновлён", "success");
+    } catch (apiError) {
+      setError(apiError.message || "Не удалось обновить клиента");
+      showToast(apiError.message || "Не удалось обновить клиента", "error");
+    }
+  }
+
+  async function deleteClient(clientId) {
+    try {
+      setError("");
+
+      await deleteClientApi(clientId);
+
+      setClients((currentClients) =>
+        currentClients.filter((client) => client.id !== clientId)
+      );
+
+      showToast("Клиент удалён", "success");
+    } catch (apiError) {
+      setError(apiError.message || "Не удалось удалить клиента");
+      showToast(apiError.message || "Не удалось удалить клиента", "error");
+    }
+  }
+
+  async function updateClientMeasurements(clientId, measurements) {
+    const client = clients.find((item) => item.id === clientId);
+
+    if (!client) {
+      showToast("Клиент не найден", "error");
+      return;
+    }
+
+    await updateClient(clientId, {
+      name: client.name,
+      phone: client.phone,
+      email: client.email,
+      comment: client.comment || "",
+      measurements,
+      oldName: client.name,
+    });
+  }
+
+  async function addOrder(orderData) {
+    try {
+      setError("");
+
+      const orderPayload = adaptOrderToApi(orderData, clients);
+      const createdOrder = await createOrder(orderPayload);
+      const adaptedOrder = adaptOrderFromApi(createdOrder);
+
+      setOrders((currentOrders) => [adaptedOrder, ...currentOrders]);
+
+      setClients((currentClients) =>
+        currentClients.map((client) =>
+          client.id === adaptedOrder.clientId
+            ? { ...client, orders: Number(client.orders || 0) + 1 }
+            : client
+        )
+      );
+
+      showToast("Заказ создан", "success");
+    } catch (apiError) {
+      setError(apiError.message || "Не удалось создать заказ");
+      showToast(apiError.message || "Не удалось создать заказ", "error");
+    }
+  }
+
+  async function updateOrder(orderId, updatedData) {
+    try {
+      setError("");
+
+      const existingOrder = orders.find(
+        (order) => order.id === orderId || order.backendId === orderId
+      );
+
+      if (!existingOrder) {
+        showToast("Заказ не найден", "error");
+        return;
+      }
+
+      const orderPayload = adaptOrderToApi(updatedData, clients);
+
+      const updatedOrderFromApi = await updateOrderApi(
+        existingOrder.backendId,
+        orderPayload
+      );
+
+      const adaptedOrder = adaptOrderFromApi(updatedOrderFromApi);
+
+      setOrders((currentOrders) =>
+        currentOrders.map((order) =>
+          order.backendId === existingOrder.backendId ? adaptedOrder : order
+        )
+      );
+
+      if (existingOrder.clientId !== adaptedOrder.clientId) {
+        setClients((currentClients) =>
+          currentClients.map((client) => {
+            if (client.id === existingOrder.clientId) {
+              return {
+                ...client,
+                orders: Math.max(Number(client.orders || 0) - 1, 0),
+              };
             }
-          : client
-      )
-    );
 
-    // Если имя клиента изменилось — обновляем его в заказах
-    setOrders((currentOrders) =>
-      currentOrders.map((order) =>
-        order.client === updatedData.oldName
-          ? {
-              ...order,
-              client: updatedData.name,
+            if (client.id === adaptedOrder.clientId) {
+              return {
+                ...client,
+                orders: Number(client.orders || 0) + 1,
+              };
             }
-          : order
-      )
-    );
 
-    // Если имя клиента изменилось — обновляем его в примерках
-    setFittings((currentFittings) =>
-      currentFittings.map((fitting) =>
-        fitting.client === updatedData.oldName
-          ? {
-              ...fitting,
-              client: updatedData.name,
-            }
-          : fitting
-      )
-    );
-  };
+            return client;
+          })
+        );
+      }
 
-  // Удаляет клиента
-  const deleteClient = (clientId) => {
-    setClients((currentClients) =>
-      currentClients.filter((client) => client.id !== clientId)
-    );
-  };
+      showToast("Заказ обновлён", "success");
+    } catch (apiError) {
+      setError(apiError.message || "Не удалось обновить заказ");
+      showToast(apiError.message || "Не удалось обновить заказ", "error");
+    }
+  }
 
-  // Обновляет замеры конкретного клиента
-  const updateClientMeasurements = (clientId, measurements) => {
-    setClients((currentClients) =>
-      currentClients.map((client) =>
-        client.id === clientId
-          ? {
-              ...client,
-              measurements,
-            }
-          : client
-      )
-    );
-  };
+  async function deleteOrder(orderId) {
+    try {
+      setError("");
 
-  // Добавляет новый заказ
-  const addOrder = (orderData) => {
-    const newOrder = {
-      id: getNextOrderId(orders),
-      client: orderData.client,
-      product: orderData.product,
-      price: orderData.price,
-      status: orderData.status,
-      statusClass: getStatusClass(orderData.status),
-      deadline: orderData.deadline,
-      comment: orderData.comment || "",
-    };
+      const existingOrder = orders.find(
+        (order) => order.id === orderId || order.backendId === orderId
+      );
 
-    setOrders((currentOrders) => [newOrder, ...currentOrders]);
+      if (!existingOrder) {
+        showToast("Заказ не найден", "error");
+        return;
+      }
 
-    // Увеличиваем счетчик заказов у клиента
-    setClients((currentClients) =>
-      currentClients.map((client) =>
-        client.name === orderData.client
-          ? { ...client, orders: client.orders + 1 }
-          : client
-      )
-    );
-  };
+      await deleteOrderApi(existingOrder.backendId);
 
-  // Обновляет данные заказа
-  const updateOrder = (orderId, updatedData) => {
-    setOrders((currentOrders) =>
-      currentOrders.map((order) =>
-        order.id === orderId
-          ? {
-              ...order,
-              client: updatedData.client,
-              product: updatedData.product,
-              price: updatedData.price,
-              status: updatedData.status,
-              statusClass: getStatusClass(updatedData.status),
-              deadline: updatedData.deadline,
-              comment: updatedData.comment || "",
-            }
-          : order
-      )
-    );
-  };
+      setOrders((currentOrders) =>
+        currentOrders.filter(
+          (order) => order.backendId !== existingOrder.backendId
+        )
+      );
 
-  // Удаляет заказ
-  const deleteOrder = (orderId) => {
-    setOrders((currentOrders) =>
-      currentOrders.filter((order) => order.id !== orderId)
-    );
-  };
+      setClients((currentClients) =>
+        currentClients.map((client) =>
+          client.id === existingOrder.clientId
+            ? {
+                ...client,
+                orders: Math.max(Number(client.orders || 0) - 1, 0),
+              }
+            : client
+        )
+      );
 
-  // Меняет статус заказа
-  const updateOrderStatus = (orderId, newStatus) => {
-    setOrders((currentOrders) =>
-      currentOrders.map((order) =>
-        order.id === orderId
-          ? {
-              ...order,
-              status: newStatus,
-              statusClass: getStatusClass(newStatus),
-            }
-          : order
-      )
-    );
-  };
+      showToast("Заказ удалён", "success");
+    } catch (apiError) {
+      setError(apiError.message || "Не удалось удалить заказ");
+      showToast(apiError.message || "Не удалось удалить заказ", "error");
+    }
+  }
 
-  // Создает новую примерку
-  const addFitting = (fittingData) => {
-    const newFitting = {
-      id: Date.now(),
-      client: fittingData.client,
-      order: fittingData.order,
-      date: fittingData.date,
-      time: fittingData.time,
-      status: fittingData.status || "Запланирована",
-      comment: fittingData.comment || "",
-    };
+  async function updateOrderStatus(orderId, status) {
+    try {
+      setError("");
 
-    setFittings((currentFittings) => [newFitting, ...currentFittings]);
-  };
+      const existingOrder = orders.find(
+        (order) => order.id === orderId || order.backendId === orderId
+      );
 
-  // Обновляет данные примерки: клиент, заказ, дата, время, статус, комментарий
-  const updateFitting = (fittingId, updatedData) => {
-    setFittings((currentFittings) =>
-      currentFittings.map((fitting) =>
-        fitting.id === fittingId
-          ? {
-              ...fitting,
-              client: updatedData.client,
-              order: updatedData.order,
-              date: updatedData.date,
-              time: updatedData.time,
-              status: updatedData.status,
-              comment: updatedData.comment || "",
-            }
-          : fitting
-      )
-    );
-  };
+      if (!existingOrder) {
+        showToast("Заказ не найден", "error");
+        return;
+      }
 
-  // Меняет только статус примерки
-  const updateFittingStatus = (fittingId, status) => {
-    setFittings((currentFittings) =>
-      currentFittings.map((fitting) =>
-        fitting.id === fittingId
-          ? {
-              ...fitting,
-              status,
-            }
-          : fitting
-      )
-    );
-  };
+      const updatedOrderFromApi = await updateOrderStatusApi(
+        existingOrder.backendId,
+        status
+      );
 
-  // Удаляет примерку
-  const deleteFitting = (fittingId) => {
-    setFittings((currentFittings) =>
-      currentFittings.filter((fitting) => fitting.id !== fittingId)
-    );
-  };
+      const adaptedOrder = adaptOrderFromApi(updatedOrderFromApi);
 
-  // Возвращает все данные CRM для резервной копии
-  const exportCrmData = () => {
+      setOrders((currentOrders) =>
+        currentOrders.map((order) =>
+          order.backendId === existingOrder.backendId ? adaptedOrder : order
+        )
+      );
+
+      showToast("Статус заказа обновлён", "success");
+    } catch (apiError) {
+      setError(apiError.message || "Не удалось обновить статус заказа");
+      showToast(
+        apiError.message || "Не удалось обновить статус заказа",
+        "error"
+      );
+    }
+  }
+
+  async function addFitting(fittingData) {
+    try {
+      setError("");
+
+      const fittingPayload = adaptFittingToApi(fittingData, clients, orders);
+      const createdFitting = await createFitting(fittingPayload);
+
+      setFittings((currentFittings) => [
+        adaptFittingFromApi(createdFitting),
+        ...currentFittings,
+      ]);
+
+      showToast("Примерка создана", "success");
+    } catch (apiError) {
+      setError(apiError.message || "Не удалось создать примерку");
+      showToast(apiError.message || "Не удалось создать примерку", "error");
+    }
+  }
+
+  async function updateFitting(fittingId, updatedData) {
+    try {
+      setError("");
+
+      const existingFitting = fittings.find(
+        (fitting) =>
+          fitting.id === fittingId || fitting.backendId === fittingId
+      );
+
+      if (!existingFitting) {
+        showToast("Примерка не найдена", "error");
+        return;
+      }
+
+      const fittingPayload = adaptFittingToApi(updatedData, clients, orders);
+
+      const updatedFittingFromApi = await updateFittingApi(
+        existingFitting.backendId,
+        fittingPayload
+      );
+
+      const adaptedFitting = adaptFittingFromApi(updatedFittingFromApi);
+
+      setFittings((currentFittings) =>
+        currentFittings.map((fitting) =>
+          fitting.backendId === existingFitting.backendId
+            ? adaptedFitting
+            : fitting
+        )
+      );
+
+      showToast("Примерка обновлена", "success");
+    } catch (apiError) {
+      setError(apiError.message || "Не удалось обновить примерку");
+      showToast(apiError.message || "Не удалось обновить примерку", "error");
+    }
+  }
+
+  async function updateFittingStatus(fittingId, status) {
+    try {
+      setError("");
+
+      const existingFitting = fittings.find(
+        (fitting) =>
+          fitting.id === fittingId || fitting.backendId === fittingId
+      );
+
+      if (!existingFitting) {
+        showToast("Примерка не найдена", "error");
+        return;
+      }
+
+      const updatedFittingFromApi = await updateFittingStatusApi(
+        existingFitting.backendId,
+        status
+      );
+
+      const adaptedFitting = adaptFittingFromApi(updatedFittingFromApi);
+
+      setFittings((currentFittings) =>
+        currentFittings.map((fitting) =>
+          fitting.backendId === existingFitting.backendId
+            ? adaptedFitting
+            : fitting
+        )
+      );
+
+      showToast("Статус примерки обновлён", "success");
+    } catch (apiError) {
+      setError(apiError.message || "Не удалось обновить статус примерки");
+      showToast(
+        apiError.message || "Не удалось обновить статус примерки",
+        "error"
+      );
+    }
+  }
+
+  async function deleteFitting(fittingId) {
+    try {
+      setError("");
+
+      const existingFitting = fittings.find(
+        (fitting) =>
+          fitting.id === fittingId || fitting.backendId === fittingId
+      );
+
+      if (!existingFitting) {
+        showToast("Примерка не найдена", "error");
+        return;
+      }
+
+      await deleteFittingApi(existingFitting.backendId);
+
+      setFittings((currentFittings) =>
+        currentFittings.filter(
+          (fitting) => fitting.backendId !== existingFitting.backendId
+        )
+      );
+
+      showToast("Примерка удалена", "success");
+    } catch (apiError) {
+      setError(apiError.message || "Не удалось удалить примерку");
+      showToast(apiError.message || "Не удалось удалить примерку", "error");
+    }
+  }
+
+  function exportCrmData() {
     return {
       clients,
       orders,
       fittings,
       exportedAt: new Date().toISOString(),
-      app: "TailorCRM",
+      source: "backend-api",
     };
-  };
+  }
 
-  // Импортирует данные CRM из резервной копии
-  const importCrmData = (backupData) => {
-    if (
-      !backupData ||
-      !Array.isArray(backupData.clients) ||
-      !Array.isArray(backupData.orders) ||
-      !Array.isArray(backupData.fittings)
-    ) {
-      throw new Error("Неверный формат файла резервной копии");
-    }
+  function importCrmData() {
+    showToast("Импорт backup в backend будет добавлен позже", "info");
+    return false;
+  }
 
-    setClients(backupData.clients);
-    setOrders(backupData.orders);
-    setFittings(backupData.fittings);
-  };
+  function resetCrmData() {
+    showToast("Сброс backend-данных будет добавлен позже", "info");
+    return false;
+  }
 
-  // Полностью сбрасывает CRM к стартовым данным
-  const resetCrmData = () => {
-    setClients(initialClients);
-    setOrders(initialOrders);
-    setFittings(initialFittings);
-  };
-
-  // Всё, что мы передаем другим компонентам через useCrm()
   const value = {
-  clients,
-  orders,
-  fittings,
+    clients,
+    orders,
+    fittings,
+    loading,
+    error,
 
-  addClient,
-  updateClient,
-  deleteClient,
-  updateClientMeasurements,
+    reloadCrmData: loadCrmData,
 
-  addOrder,
-  updateOrder,
-  deleteOrder,
-  updateOrderStatus,
+    addClient,
+    updateClient,
+    deleteClient,
+    updateClientMeasurements,
 
-  addFitting,
-  updateFitting,
-  updateFittingStatus,
-  deleteFitting,
+    addOrder,
+    updateOrder,
+    deleteOrder,
+    updateOrderStatus,
 
-  exportCrmData,
-  importCrmData,
-  resetCrmData,
-};
+    addFitting,
+    updateFitting,
+    updateFittingStatus,
+    deleteFitting,
 
+    exportCrmData,
+    importCrmData,
+    resetCrmData,
+  };
+
+  if (loading) {
+  return <LoadingState />;
+}
+
+if (error) {
+  return <ErrorState message={error} onRetry={loadCrmData} />;
+}
   return <CrmContext.Provider value={value}>{children}</CrmContext.Provider>;
 }
 
-// Хук для доступа к CRM-данным в любом компоненте
 export function useCrm() {
   const context = useContext(CrmContext);
 
   if (!context) {
-    throw new Error("useCrm должен использоваться внутри CrmProvider");
+    throw new Error("useCrm must be used inside CrmProvider");
   }
 
   return context;
