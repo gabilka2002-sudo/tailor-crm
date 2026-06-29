@@ -1,8 +1,6 @@
 import { useCrm } from "../context/CrmContext";
 
 function parseDate(dateString) {
-  // В проекте даты могут быть в формате "20.07.2026" или "2026-07-20".
-  // Эта функция приводит оба формата к обычной JavaScript Date.
   if (!dateString) return null;
 
   if (dateString.includes(".")) {
@@ -13,22 +11,22 @@ function parseDate(dateString) {
   return new Date(dateString);
 }
 
+function parseMoney(value) {
+  return Number(String(value || "").replace(/\D/g, "")) || 0;
+}
+
 export default function StatsCards() {
-  // Берем реальные заказы, клиентов и примерки из общего CRM-хранилища
   const { orders, clients, fittings } = useCrm();
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  // Активные заказы — это всё, что ещё не готово
   const activeOrders = orders.filter(
     (order) => order.status === "В работе" || order.status === "Примерка"
   );
 
-  // Готовые заказы
   const completedOrders = orders.filter((order) => order.status === "Готово");
 
-  // Просроченные заказы: срок меньше сегодняшней даты и заказ ещё не готов
   const overdueOrders = orders.filter((order) => {
     const deadline = parseDate(order.deadline);
 
@@ -37,16 +35,27 @@ export default function StatsCards() {
     return deadline < today && order.status !== "Готово";
   });
 
-  // Запланированные примерки
   const plannedFittings = fittings.filter(
     (fitting) => fitting.status === "Запланирована"
   );
 
-  // Считаем общую сумму заказов
   const totalRevenue = orders.reduce((sum, order) => {
-    const numericPrice = Number(String(order.price).replace(/\D/g, ""));
-    return sum + numericPrice;
+    return sum + parseMoney(order.price);
   }, 0);
+
+  const totalPaid = orders.reduce((sum, order) => {
+    return sum + parseMoney(order.paidAmount);
+  }, 0);
+
+  const totalRemaining = orders.reduce((sum, order) => {
+    return sum + parseMoney(order.remainingAmount);
+  }, 0);
+
+  const unpaidOrders = orders.filter(
+    (order) =>
+      order.paymentStatus === "Не оплачено" ||
+      order.paymentStatus === "Частично оплачено"
+  );
 
   const stats = [
     {
@@ -70,8 +79,20 @@ export default function StatsCards() {
       value: plannedFittings.length,
     },
     {
-      title: "Выручка",
+      title: "Сумма заказов",
       value: `${totalRevenue} €`,
+    },
+    {
+      title: "Оплачено",
+      value: `${totalPaid} €`,
+    },
+    {
+      title: "Остаток",
+      value: `${totalRemaining} €`,
+    },
+    {
+      title: "Неоплаченные",
+      value: unpaidOrders.length,
     },
   ];
 
