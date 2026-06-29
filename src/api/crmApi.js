@@ -85,6 +85,13 @@ export function updateOrderStatus(orderId, status) {
   });
 }
 
+export function updateOrderPayment(orderId, paymentData) {
+  return request(`/orders/${orderId}/payment`, {
+    method: "PATCH",
+    body: JSON.stringify(paymentData),
+  });
+}
+
 export function deleteOrder(orderId) {
   return request(`/orders/${orderId}`, {
     method: "DELETE",

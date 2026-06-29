@@ -13,13 +13,25 @@ export function getOrderStatusClass(status) {
 }
 
 // Возвращает CSS-класс для статуса примерки.
-// Пока оставляем простую логику.
 export function getFittingStatusClass(status) {
   if (status === "Прошла") {
     return "green";
   }
 
   if (status === "Отменена") {
+    return "purple";
+  }
+
+  return "blue";
+}
+
+// Возвращает CSS-класс для статуса оплаты.
+export function getPaymentStatusClass(status) {
+  if (status === "Оплачено") {
+    return "green";
+  }
+
+  if (status === "Частично оплачено") {
     return "purple";
   }
 
@@ -64,6 +76,11 @@ export function formatDateForApi(dateValue) {
   return value;
 }
 
+// Превращает значение "850 €" или "850" в число 850
+export function parseMoneyValue(value) {
+  return Number(String(value || "").replace(/[^\d]/g, "")) || 0;
+}
+
 // Адаптирует клиента из backend под формат, который сейчас ждёт frontend
 export function adaptClientFromApi(client) {
   return {
@@ -79,13 +96,25 @@ export function adaptClientFromApi(client) {
 
 // Адаптирует заказ из backend под текущий frontend
 export function adaptOrderFromApi(order) {
+  const price = Number(order.price || 0);
+  const paidAmount = Number(order.paidAmount || 0);
+  const remainingAmount = Math.max(price - paidAmount, 0);
+
   return {
     id: order.orderNumber,
     backendId: order.id,
     clientId: order.clientId,
     client: order.client?.name || "",
     product: order.product,
-    price: `${order.price} €`,
+
+    price: `${price} €`,
+    paidAmount: `${paidAmount} €`,
+    remainingAmount: `${remainingAmount} €`,
+    paymentStatus: order.paymentStatus || "Не оплачено",
+    paymentStatusClass: getPaymentStatusClass(
+      order.paymentStatus || "Не оплачено"
+    ),
+
     status: order.status,
     statusClass: getOrderStatusClass(order.status),
     deadline: formatDateForUi(order.deadline),
@@ -129,6 +158,8 @@ export function adaptOrderToApi(orderData, clients) {
     clientId: orderData.clientId || client?.id,
     product: orderData.product,
     price: orderData.price,
+    paidAmount: orderData.paidAmount || 0,
+    paymentStatus: orderData.paymentStatus || "",
     status: orderData.status,
     deadline: formatDateForApi(orderData.deadline),
     comment: orderData.comment || "",

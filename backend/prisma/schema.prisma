@@ -23,16 +23,18 @@ model Client {
 }
 
 model Order {
-  id          Int      @id @default(autoincrement())
-  orderNumber String   @unique
-  clientId    Int
-  product     String
-  price       Int
-  status      String   @default("В работе")
-  deadline    DateTime
-  comment     String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id            Int      @id @default(autoincrement())
+  orderNumber   String   @unique
+  clientId      Int
+  product       String
+  price         Int
+  paidAmount    Int      @default(0)
+  paymentStatus String   @default("Не оплачено")
+  status        String   @default("В работе")
+  deadline      DateTime
+  comment       String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   client   Client    @relation(fields: [clientId], references: [id])
   fittings Fitting[]

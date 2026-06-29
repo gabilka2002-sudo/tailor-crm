@@ -1134,3 +1134,36 @@ td {
     transform: rotate(360deg);
   }
 }
+.table-wrapper {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.orders-table {
+  width: 100%;
+  min-width: 850px;
+  border-collapse: collapse;
+}
+
+.orders-table th,
+.orders-table td {
+  padding: 16px 10px;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.orders-table th {
+  color: #6b7280;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.orders-table td {
+  color: #111827;
+  font-size: 15px;
+}
+
+.orders-table td:nth-child(2),
+.orders-table td:nth-child(3) {
+  white-space: normal;
+}

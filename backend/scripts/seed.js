@@ -5,6 +5,8 @@ const prisma = new PrismaClient();
 async function main() {
   console.log("Cleaning old demo data...");
 
+  // Сначала удаляем примерки, потом заказы, потом клиентов,
+  // потому что примерки связаны с заказами и клиентами.
   await prisma.fitting.deleteMany();
   await prisma.order.deleteMany();
   await prisma.client.deleteMany();
@@ -77,6 +79,22 @@ async function main() {
     },
   });
 
+  const client5 = await prisma.client.create({
+    data: {
+      name: "Oliwia Lewandowska",
+      phone: "+48 504 555 666",
+      email: "oliwia.lewandowska@example.com",
+      comment: "Платье на выпускной. Клиент хочет лёгкий атлас.",
+      ordersCount: 0,
+      measurements: {
+        bust: "86",
+        waist: "62",
+        hips: "91",
+        height: "172",
+      },
+    },
+  });
+
   console.log("Creating demo orders...");
 
   const order1 = await prisma.order.create({
@@ -85,6 +103,8 @@ async function main() {
       clientId: client1.id,
       product: "Свадебное платье",
       price: 2400,
+      paidAmount: 1000,
+      paymentStatus: "Частично оплачено",
       status: "Примерка",
       deadline: new Date("2026-07-20"),
       comment: "Добавить кружево на рукава.",
@@ -97,6 +117,8 @@ async function main() {
       clientId: client2.id,
       product: "Мужской костюм",
       price: 1300,
+      paidAmount: 0,
+      paymentStatus: "Не оплачено",
       status: "В работе",
       deadline: new Date("2026-07-15"),
       comment: "Классический тёмный костюм.",
@@ -109,6 +131,8 @@ async function main() {
       clientId: client3.id,
       product: "Вечернее платье",
       price: 1800,
+      paidAmount: 1800,
+      paymentStatus: "Оплачено",
       status: "Готово",
       deadline: new Date("2026-07-10"),
       comment: "Платье готово к выдаче.",
@@ -121,9 +145,25 @@ async function main() {
       clientId: client4.id,
       product: "Ремонт пальто",
       price: 350,
+      paidAmount: 150,
+      paymentStatus: "Частично оплачено",
       status: "В работе",
       deadline: new Date("2026-07-08"),
       comment: "Заменить подкладку и пуговицы.",
+    },
+  });
+
+  const order5 = await prisma.order.create({
+    data: {
+      orderNumber: "#005",
+      clientId: client5.id,
+      product: "Платье на выпускной",
+      price: 1600,
+      paidAmount: 500,
+      paymentStatus: "Частично оплачено",
+      status: "В работе",
+      deadline: new Date("2026-07-25"),
+      comment: "Нужен лёгкий силуэт и открытая спина.",
     },
   });
 
@@ -146,6 +186,11 @@ async function main() {
 
   await prisma.client.update({
     where: { id: client4.id },
+    data: { ordersCount: 1 },
+  });
+
+  await prisma.client.update({
+    where: { id: client5.id },
     data: { ordersCount: 1 },
   });
 
@@ -192,6 +237,17 @@ async function main() {
       time: "17:00",
       status: "Прошла",
       comment: "Клиент подтвердил финальную длину.",
+    },
+  });
+
+  await prisma.fitting.create({
+    data: {
+      clientId: client5.id,
+      orderId: order5.id,
+      date: new Date("2026-07-11"),
+      time: "13:00",
+      status: "Запланирована",
+      comment: "Первая примерка платья на выпускной.",
     },
   });
 

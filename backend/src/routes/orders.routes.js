@@ -15,6 +15,22 @@ function parsePrice(value) {
   return Number(String(value || "").replace(/[^\d]/g, ""));
 }
 
+// Автоматически определяем статус оплаты
+function getPaymentStatus(price, paidAmount) {
+  const numericPrice = Number(price || 0);
+  const numericPaidAmount = Number(paidAmount || 0);
+
+  if (numericPaidAmount <= 0) {
+    return "Не оплачено";
+  }
+
+  if (numericPaidAmount >= numericPrice) {
+    return "Оплачено";
+  }
+
+  return "Частично оплачено";
+}
+
 // Получить все заказы
 router.get("/", async (request, response) => {
   try {
@@ -76,7 +92,16 @@ router.get("/:id", async (request, response) => {
 // Создать заказ
 router.post("/", async (request, response) => {
   try {
-    const { clientId, product, price, status, deadline, comment } = request.body;
+    const {
+      clientId,
+      product,
+      price,
+      paidAmount,
+      paymentStatus,
+      status,
+      deadline,
+      comment,
+    } = request.body;
 
     if (!clientId || !product || !price || !deadline) {
       return response.status(400).json({
@@ -97,6 +122,7 @@ router.post("/", async (request, response) => {
     }
 
     const numericPrice = parsePrice(price);
+    const numericPaidAmount = parsePrice(paidAmount || 0);
 
     if (!numericPrice || numericPrice <= 0) {
       return response.status(400).json({
@@ -104,7 +130,22 @@ router.post("/", async (request, response) => {
       });
     }
 
+    if (numericPaidAmount < 0) {
+      return response.status(400).json({
+        error: "Paid amount cannot be negative",
+      });
+    }
+
+    if (numericPaidAmount > numericPrice) {
+      return response.status(400).json({
+        error: "Paid amount cannot be greater than price",
+      });
+    }
+
     const orderNumber = await getNextOrderNumber();
+
+    const finalPaymentStatus =
+      paymentStatus || getPaymentStatus(numericPrice, numericPaidAmount);
 
     const order = await prisma.order.create({
       data: {
@@ -112,12 +153,15 @@ router.post("/", async (request, response) => {
         clientId: Number(clientId),
         product: product.trim(),
         price: numericPrice,
+        paidAmount: numericPaidAmount,
+        paymentStatus: finalPaymentStatus,
         status: status || "В работе",
         deadline: new Date(deadline),
         comment: comment?.trim() || null,
       },
       include: {
         client: true,
+        fittings: true,
       },
     });
 
@@ -153,7 +197,16 @@ router.put("/:id", async (request, response) => {
       });
     }
 
-    const { clientId, product, price, status, deadline, comment } = request.body;
+    const {
+      clientId,
+      product,
+      price,
+      paidAmount,
+      paymentStatus,
+      status,
+      deadline,
+      comment,
+    } = request.body;
 
     if (!clientId || !product || !price || !deadline) {
       return response.status(400).json({
@@ -162,10 +215,23 @@ router.put("/:id", async (request, response) => {
     }
 
     const numericPrice = parsePrice(price);
+    const numericPaidAmount = parsePrice(paidAmount || 0);
 
     if (!numericPrice || numericPrice <= 0) {
       return response.status(400).json({
         error: "Price must be a positive number",
+      });
+    }
+
+    if (numericPaidAmount < 0) {
+      return response.status(400).json({
+        error: "Paid amount cannot be negative",
+      });
+    }
+
+    if (numericPaidAmount > numericPrice) {
+      return response.status(400).json({
+        error: "Paid amount cannot be greater than price",
       });
     }
 
@@ -193,6 +259,9 @@ router.put("/:id", async (request, response) => {
       });
     }
 
+    const finalPaymentStatus =
+      paymentStatus || getPaymentStatus(numericPrice, numericPaidAmount);
+
     const updatedOrder = await prisma.order.update({
       where: {
         id: orderId,
@@ -201,6 +270,8 @@ router.put("/:id", async (request, response) => {
         clientId: Number(clientId),
         product: product.trim(),
         price: numericPrice,
+        paidAmount: numericPaidAmount,
+        paymentStatus: finalPaymentStatus,
         status: status || existingOrder.status,
         deadline: new Date(deadline),
         comment: comment?.trim() || null,
@@ -281,6 +352,71 @@ router.patch("/:id/status", async (request, response) => {
   } catch (error) {
     response.status(500).json({
       error: "Failed to update order status",
+      details: error.message,
+    });
+  }
+});
+
+// Быстро обновить оплату заказа
+router.patch("/:id/payment", async (request, response) => {
+  try {
+    const orderId = Number(request.params.id);
+    const { paidAmount, paymentStatus } = request.body;
+
+    if (!orderId) {
+      return response.status(400).json({
+        error: "Invalid order id",
+      });
+    }
+
+    const existingOrder = await prisma.order.findUnique({
+      where: {
+        id: orderId,
+      },
+    });
+
+    if (!existingOrder) {
+      return response.status(404).json({
+        error: "Order not found",
+      });
+    }
+
+    const numericPaidAmount = parsePrice(paidAmount || 0);
+
+    if (numericPaidAmount < 0) {
+      return response.status(400).json({
+        error: "Paid amount cannot be negative",
+      });
+    }
+
+    if (numericPaidAmount > existingOrder.price) {
+      return response.status(400).json({
+        error: "Paid amount cannot be greater than price",
+      });
+    }
+
+    const finalPaymentStatus =
+      paymentStatus ||
+      getPaymentStatus(existingOrder.price, numericPaidAmount);
+
+    const updatedOrder = await prisma.order.update({
+      where: {
+        id: orderId,
+      },
+      data: {
+        paidAmount: numericPaidAmount,
+        paymentStatus: finalPaymentStatus,
+      },
+      include: {
+        client: true,
+        fittings: true,
+      },
+    });
+
+    response.json(updatedOrder);
+  } catch (error) {
+    response.status(500).json({
+      error: "Failed to update order payment",
       details: error.message,
     });
   }
