@@ -11,6 +11,8 @@ const emptyOrderForm = {
   client: "",
   product: "",
   price: "",
+  paidAmount: "",
+  paymentStatus: "",
   status: "В работе",
   deadline: "",
   comment: "",
@@ -35,10 +37,7 @@ export default function Orders({ setPage }) {
 
   const [selectedOrderId, setSelectedOrderId] = useState(null);
 
-  // Черновик нового заказа не очищается при закрытии окна
   const [orderForm, setOrderForm] = useState(emptyOrderForm);
-
-  // Данные формы редактирования заказа
   const [editForm, setEditForm] = useState(emptyOrderForm);
 
   const selectedOrder = orders.find((order) => order.id === selectedOrderId);
@@ -50,7 +49,6 @@ export default function Orders({ setPage }) {
     Готово: orders.filter((order) => order.status === "Готово").length,
   };
 
-  // Здесь одновременно работают поиск, фильтр и сортировка
   const filteredOrders = orders
     .filter((order) => {
       const searchText = search.toLowerCase();
@@ -59,7 +57,8 @@ export default function Orders({ setPage }) {
         order.id.toLowerCase().includes(searchText) ||
         order.client.toLowerCase().includes(searchText) ||
         order.product.toLowerCase().includes(searchText) ||
-        order.status.toLowerCase().includes(searchText);
+        order.status.toLowerCase().includes(searchText) ||
+        order.paymentStatus.toLowerCase().includes(searchText);
 
       const matchesStatus =
         statusFilter === "Все" || order.status === statusFilter;
@@ -89,8 +88,26 @@ export default function Orders({ setPage }) {
         return parsePrice(firstOrder.price) - parsePrice(secondOrder.price);
       }
 
+      if (sortBy === "paidDesc") {
+        return parsePrice(secondOrder.paidAmount) - parsePrice(firstOrder.paidAmount);
+      }
+
+      if (sortBy === "remainingDesc") {
+        return (
+          parsePrice(secondOrder.remainingAmount) -
+          parsePrice(firstOrder.remainingAmount)
+        );
+      }
+
       if (sortBy === "status") {
         return firstOrder.status.localeCompare(secondOrder.status, "ru");
+      }
+
+      if (sortBy === "paymentStatus") {
+        return firstOrder.paymentStatus.localeCompare(
+          secondOrder.paymentStatus,
+          "ru"
+        );
       }
 
       if (sortBy === "newest") {
@@ -105,7 +122,6 @@ export default function Orders({ setPage }) {
     });
 
   function handleOpenNewOrderForm() {
-    // Нельзя создать заказ без клиента
     if (clients.length === 0) {
       alert("Сначала добавь хотя бы одного клиента");
       setPage("clients");
@@ -135,12 +151,13 @@ export default function Orders({ setPage }) {
       client: orderForm.client,
       product: orderForm.product.trim(),
       price: orderForm.price,
+      paidAmount: orderForm.paidAmount || 0,
+      paymentStatus: orderForm.paymentStatus,
       status: orderForm.status,
       deadline: orderForm.deadline.trim(),
       comment: orderForm.comment.trim(),
     };
 
-    // Проверяем данные перед созданием заказа
     const validationError = validateOrderData(newOrder);
 
     if (validationError) {
@@ -148,13 +165,12 @@ export default function Orders({ setPage }) {
       return;
     }
 
-    // Нормализуем цену: "500" -> "500 €"
     addOrder({
       ...newOrder,
       price: normalizePrice(newOrder.price),
+      paidAmount: newOrder.paidAmount,
     });
 
-    // После успешного создания очищаем форму
     setOrderForm(emptyOrderForm);
     setShowForm(false);
   }
@@ -176,11 +192,12 @@ export default function Orders({ setPage }) {
   function handleStartEdit(order) {
     setIsEditing(true);
 
-    // Убираем знак €, чтобы в поле редактировалось только число
     setEditForm({
       client: order.client,
       product: order.product,
       price: String(order.price).replace(/[^\d]/g, ""),
+      paidAmount: String(order.paidAmount || "").replace(/[^\d]/g, ""),
+      paymentStatus: order.paymentStatus || "",
       status: order.status,
       deadline: order.deadline,
       comment: order.comment || "",
@@ -211,6 +228,7 @@ export default function Orders({ setPage }) {
     updateOrder(selectedOrder.id, {
       ...editForm,
       price: normalizePrice(editForm.price),
+      paidAmount: editForm.paidAmount || 0,
     });
 
     setIsEditing(false);
@@ -222,8 +240,6 @@ export default function Orders({ setPage }) {
   }
 
   function escapeCsvValue(value) {
-    // CSV ломается от запятых, кавычек и переносов строк,
-    // поэтому такие значения оборачиваем в кавычки
     const stringValue = String(value ?? "");
 
     if (
@@ -243,17 +259,22 @@ export default function Orders({ setPage }) {
       "Клиент",
       "Изделие",
       "Стоимость",
-      "Статус",
+      "Оплачено",
+      "Остаток",
+      "Статус оплаты",
+      "Статус заказа",
       "Срок",
       "Комментарий",
     ];
 
-    // Экспортируем именно то, что сейчас видно в таблице
     const rows = filteredOrders.map((order) => [
       order.id,
       order.client,
       order.product,
       order.price,
+      order.paidAmount,
+      order.remainingAmount,
+      order.paymentStatus,
       order.status,
       order.deadline,
       order.comment || "",
@@ -263,7 +284,6 @@ export default function Orders({ setPage }) {
       .map((row) => row.map(escapeCsvValue).join(","))
       .join("\n");
 
-    // BOM нужен, чтобы Excel нормально открывал кириллицу
     const file = new Blob([`\uFEFF${csvContent}`], {
       type: "text/csv;charset=utf-8;",
     });
@@ -299,7 +319,10 @@ export default function Orders({ setPage }) {
               Экспорт CSV
             </button>
 
-            <button className="new-order-button" onClick={handleOpenNewOrderForm}>
+            <button
+              className="new-order-button"
+              onClick={handleOpenNewOrderForm}
+            >
               + Новый заказ
             </button>
           </div>
@@ -349,7 +372,31 @@ export default function Orders({ setPage }) {
               </label>
 
               <label>
-                Статус
+                Оплачено
+                <input
+                  name="paidAmount"
+                  value={orderForm.paidAmount}
+                  onChange={handleOrderFormChange}
+                  placeholder="0"
+                />
+              </label>
+
+              <label>
+                Статус оплаты
+                <select
+                  name="paymentStatus"
+                  value={orderForm.paymentStatus}
+                  onChange={handleOrderFormChange}
+                >
+                  <option value="">Автоматически</option>
+                  <option>Не оплачено</option>
+                  <option>Частично оплачено</option>
+                  <option>Оплачено</option>
+                </select>
+              </label>
+
+              <label>
+                Статус заказа
                 <select
                   name="status"
                   value={orderForm.status}
@@ -444,7 +491,10 @@ export default function Orders({ setPage }) {
             <option value="deadlineDesc">Сначала дальний срок</option>
             <option value="priceDesc">Сначала дорогие</option>
             <option value="priceAsc">Сначала дешёвые</option>
-            <option value="status">По статусу</option>
+            <option value="paidDesc">Сначала больше оплачено</option>
+            <option value="remainingDesc">Сначала большой остаток</option>
+            <option value="status">По статусу заказа</option>
+            <option value="paymentStatus">По статусу оплаты</option>
             <option value="newest">Сначала новые</option>
             <option value="oldest">Сначала старые</option>
           </select>
@@ -452,55 +502,66 @@ export default function Orders({ setPage }) {
 
         <div className="orders-card">
           {filteredOrders.length > 0 ? (
-            <table>
-              <thead>
-                <tr>
-                  <th>№</th>
-                  <th>Клиент</th>
-                  <th>Изделие</th>
-                  <th>Стоимость</th>
-                  <th>Статус</th>
-                  <th>Срок</th>
-                  <th>Действия</th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {filteredOrders.map((order) => (
-                  <tr
-                    key={order.id}
-                    onClick={() => {
-                      setSelectedOrderId(order.id);
-                      setIsEditing(false);
-                    }}
-                    style={{ cursor: "pointer" }}
-                  >
-                    <td>{order.id}</td>
-                    <td>{order.client}</td>
-                    <td>{order.product}</td>
-                    <td>{order.price}</td>
-                    <td>
-                      <span className={`status ${order.statusClass}`}>
-                        {order.status}
-                      </span>
-                    </td>
-                    <td>{order.deadline}</td>
-                    <td>
-                      <button
-                        className="delete-client-button"
-                        onClick={(event) => {
-                          // Чтобы кнопка удаления не открывала карточку заказа
-                          event.stopPropagation();
-                          handleDeleteOrder(order.id);
-                        }}
-                      >
-                        Удалить
-                      </button>
-                    </td>
+            <div className="table-wrapper">
+              <table className="orders-table">
+                <thead>
+                  <tr>
+                    <th>№</th>
+                    <th>Клиент</th>
+                    <th>Изделие</th>
+                    <th>Стоимость</th>
+                    <th>Оплачено</th>
+                    <th>Остаток</th>
+                    <th>Оплата</th>
+                    <th>Статус</th>
+                    <th>Срок</th>
+                    <th>Действия</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+
+                <tbody>
+                  {filteredOrders.map((order) => (
+                    <tr
+                      key={order.backendId || order.id}
+                      onClick={() => {
+                        setSelectedOrderId(order.id);
+                        setIsEditing(false);
+                      }}
+                      style={{ cursor: "pointer" }}
+                    >
+                      <td>{order.id}</td>
+                      <td>{order.client}</td>
+                      <td>{order.product}</td>
+                      <td>{order.price}</td>
+                      <td>{order.paidAmount}</td>
+                      <td>{order.remainingAmount}</td>
+                      <td>
+                        <span className={`status ${order.paymentStatusClass}`}>
+                          {order.paymentStatus}
+                        </span>
+                      </td>
+                      <td>
+                        <span className={`status ${order.statusClass}`}>
+                          {order.status}
+                        </span>
+                      </td>
+                      <td>{order.deadline}</td>
+                      <td>
+                        <button
+                          className="delete-client-button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            handleDeleteOrder(order.id);
+                          }}
+                        >
+                          Удалить
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           ) : (
             <EmptyState
               title={orders.length === 0 ? "Пока нет заказов" : "Заказы не найдены"}
@@ -535,7 +596,22 @@ export default function Orders({ setPage }) {
                 </p>
 
                 <p>
-                  <strong>Статус:</strong>{" "}
+                  <strong>Оплачено:</strong> {selectedOrder.paidAmount}
+                </p>
+
+                <p>
+                  <strong>Остаток:</strong> {selectedOrder.remainingAmount}
+                </p>
+
+                <p>
+                  <strong>Статус оплаты:</strong>{" "}
+                  <span className={`status ${selectedOrder.paymentStatusClass}`}>
+                    {selectedOrder.paymentStatus}
+                  </span>
+                </p>
+
+                <p>
+                  <strong>Статус заказа:</strong>{" "}
                   <span className={`status ${selectedOrder.statusClass}`}>
                     {selectedOrder.status}
                   </span>
@@ -635,7 +711,31 @@ export default function Orders({ setPage }) {
                 </label>
 
                 <label>
-                  Статус
+                  Оплачено
+                  <input
+                    name="paidAmount"
+                    value={editForm.paidAmount}
+                    onChange={handleEditInputChange}
+                    placeholder="0"
+                  />
+                </label>
+
+                <label>
+                  Статус оплаты
+                  <select
+                    name="paymentStatus"
+                    value={editForm.paymentStatus}
+                    onChange={handleEditInputChange}
+                  >
+                    <option value="">Автоматически</option>
+                    <option>Не оплачено</option>
+                    <option>Частично оплачено</option>
+                    <option>Оплачено</option>
+                  </select>
+                </label>
+
+                <label>
+                  Статус заказа
                   <select
                     name="status"
                     value={editForm.status}
