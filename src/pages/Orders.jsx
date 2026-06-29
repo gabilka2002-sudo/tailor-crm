@@ -33,6 +33,7 @@ export default function Orders({ setPage }) {
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("Все");
+  const [paymentFilter, setPaymentFilter] = useState("Все");
   const [sortBy, setSortBy] = useState("deadlineAsc");
 
   const [selectedOrderId, setSelectedOrderId] = useState(null);
@@ -49,6 +50,18 @@ export default function Orders({ setPage }) {
     Готово: orders.filter((order) => order.status === "Готово").length,
   };
 
+  const paymentCounts = {
+    Все: orders.length,
+    "Не оплачено": orders.filter(
+      (order) => order.paymentStatus === "Не оплачено"
+    ).length,
+    "Частично оплачено": orders.filter(
+      (order) => order.paymentStatus === "Частично оплачено"
+    ).length,
+    Оплачено: orders.filter((order) => order.paymentStatus === "Оплачено")
+      .length,
+  };
+
   const filteredOrders = orders
     .filter((order) => {
       const searchText = search.toLowerCase();
@@ -63,7 +76,10 @@ export default function Orders({ setPage }) {
       const matchesStatus =
         statusFilter === "Все" || order.status === statusFilter;
 
-      return matchesSearch && matchesStatus;
+      const matchesPayment =
+        paymentFilter === "Все" || order.paymentStatus === paymentFilter;
+
+      return matchesSearch && matchesStatus && matchesPayment;
     })
     .sort((firstOrder, secondOrder) => {
       if (sortBy === "deadlineAsc") {
@@ -89,7 +105,10 @@ export default function Orders({ setPage }) {
       }
 
       if (sortBy === "paidDesc") {
-        return parsePrice(secondOrder.paidAmount) - parsePrice(firstOrder.paidAmount);
+        return (
+          parsePrice(secondOrder.paidAmount) -
+          parsePrice(firstOrder.paidAmount)
+        );
       }
 
       if (sortBy === "remainingDesc") {
@@ -479,6 +498,31 @@ export default function Orders({ setPage }) {
           className="orders-card"
           style={{ marginBottom: "24px", padding: "16px" }}
         >
+          <h2>Фильтр по оплате</h2>
+
+          <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
+            {["Все", "Не оплачено", "Частично оплачено", "Оплачено"].map(
+              (paymentStatus) => (
+                <button
+                  key={paymentStatus}
+                  className={
+                    paymentFilter === paymentStatus
+                      ? "new-order-button"
+                      : "delete-client-button"
+                  }
+                  onClick={() => setPaymentFilter(paymentStatus)}
+                >
+                  {paymentStatus} ({paymentCounts[paymentStatus]})
+                </button>
+              )
+            )}
+          </div>
+        </div>
+
+        <div
+          className="orders-card"
+          style={{ marginBottom: "24px", padding: "16px" }}
+        >
           <h2>Сортировка</h2>
 
           <select
@@ -564,7 +608,9 @@ export default function Orders({ setPage }) {
             </div>
           ) : (
             <EmptyState
-              title={orders.length === 0 ? "Пока нет заказов" : "Заказы не найдены"}
+              title={
+                orders.length === 0 ? "Пока нет заказов" : "Заказы не найдены"
+              }
               text={
                 orders.length === 0
                   ? "Создай первый заказ для клиента, чтобы начать вести работу ателье."
